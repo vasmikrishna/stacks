@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import { bonusStage, crashPoint, effectiveMultiplierUnits, payout, winProbability, resolveRound } from './math.mjs';
+for (const units of [100,101,125,200,500,1000,2500,100000]) {
+ const p=winProbability(units);
+ assert(Math.abs(p*units/100-.965)<units/100/2**32);
+ const winningSamples=Math.round(p*2**32);
+ assert(crashPoint(winningSamples-1)>=units/100);
+ assert(crashPoint(winningSamples)<units/100);
+}
+assert.equal(payout(101,125),126);
+assert.equal(payout(10000,100000),10000000);
+assert.equal(bonusStage(1.49).label,'Stacking');
+assert.equal(bonusStage(1.5).label,'Stack Bonus');
+assert.equal(bonusStage(3).label,'Double Stack');
+assert.equal(bonusStage(7).label,'Super Stack');
+assert.equal(bonusStage(25).label,'Legendary Stack');
+assert.equal(effectiveMultiplierUnits(2,[bonusStage(2)]),210);
+assert.equal(effectiveMultiplierUnits(3.42,[bonusStage(3.42)]),376);
+assert.equal(effectiveMultiplierUnits(900,[bonusStage(900)]),100000);
+assert.deepEqual(resolveRound(5,2,2),{won:true,at:2});
+assert.deepEqual(resolveRound(10,1.5,2),{won:false,at:1.5});
+assert.deepEqual(resolveRound(1,.97,2),{won:false,at:.97});
+assert.deepEqual(resolveRound(2000,3000,1000),{won:true,at:1000});
+assert.equal(resolveRound(1.5,3,2),null);
+assert.equal(resolveRound(2.5,100,2.5),null);
+assert.equal(resolveRound(99,100,2.5),null);
+assert.deepEqual(resolveRound(100,100,2.5),{won:true,at:100});
+assert.equal(payout(10000,250),25000);
+assert.deepEqual(resolveRound(2.49,2.49,2.5),{won:false,at:2.49});
+assert.deepEqual(resolveRound(2.5,2.5,2.5),{won:true,at:2.5});
+assert.throws(()=>payout(-1,100));
+assert.throws(()=>crashPoint(2**32));
+console.log('PASS: 96.5% distribution boundaries, bonus modifier payouts, cent payouts, exact ties, instant breaks, suspended-frame settlement and cap.');

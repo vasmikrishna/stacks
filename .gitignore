@@ -1,0 +1,17 @@
+node_modules/
+.next/
+.vinext/
+dist/
+out/
+coverage/
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+*.log
+.openai/
+.vercel/
+.wrangler/
+stacks-3d-home/*.png
+stacks-3d-home/stacks-3d-home/
