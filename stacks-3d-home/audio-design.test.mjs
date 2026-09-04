@@ -7,7 +7,9 @@ test('money cadence accelerates sharply as the multiplier grows', () => {
   assert.ok(cues.every((cue, index) => index === 0 || cue.intervalMs < cues[index - 1].intervalMs));
   assert.ok(cues[0].intervalMs <= 80);
   assert.ok(cues.at(-1).intervalMs <= 30);
-  assert.ok(cues.at(-1).frequency > cues[0].frequency * 2);
+  assert.ok(cues[0].frequency >= 1200);
+  assert.ok(cues.at(-1).frequency > cues[0].frequency * 1.4);
+  assert.deepEqual([0, 1, 2].map((tick) => growthCue(2, tick).pitchOffset), [1, 1.06, .96]);
   assert.equal(growthCue(3, 3).accent, true);
 });
 
