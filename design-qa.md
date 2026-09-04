@@ -1,3 +1,20 @@
+# Prism Tesseract Win Branch QA
+
+final result: passed
+
+- Branch: `codex/tesseract-glow-v3`. The preserved v2 implementation remains on `main` at commit `052cd20`.
+- Selected visual direction: Prism Tesseract option 3, refined win composition at `/Users/vamsikrishnavh/.codex/generated_images/01a06a8c-d513-7251-9766-f39a031a38c4/exec-52b757b2-ce06-4f5f-ad86-4a1aa1e198de.png`.
+- The final implementation retains the approved stepped triangular tower. A square 3D pyramid experiment was reviewed and removed at the user's request.
+- Each block is real nested Three.js geometry: a dark beveled shell, six optical windows, six projected hypercube faces, emissive corner rails on every face, a cyan inner cube, and a counter-rotating violet core.
+- Glow reacts on every direction rather than using a front-only overlay. Multiplier energy increases rail, window, projection, and core intensity while the turntable rotates.
+- The current multiplier remains at top left. A settled win eases the camera to a straight presentation and centers `YOU WON` plus the exact payout over the visible tower and complete platform.
+- Five paid-multiplier tiers provide distinct color accents, particle counts, pacing, and synthesized win sounds: Standard, Stack Bonus, Double Stack, Super Stack, and Legendary.
+- The selected reference and the 1280 x 720 deterministic prototype capture were combined in `/tmp/stacks-v3-restored-comparison.png`. The live screen keeps the selected centered hierarchy while preserving the existing ruler and play bar beneath the larger arena.
+- Deterministic browser checks covered Stack and Legendary results, exact payout announcements, populated recent results, centered camera framing, complete platform visibility, and the restored tower silhouette. Test-only tier controls are not part of production.
+- No browser console errors were observed. Main-module syntax, ten focused math/scale/history/win tests, and whitespace checks pass.
+
+---
+
 # Four-Step Game Introduction QA
 
 final result: passed

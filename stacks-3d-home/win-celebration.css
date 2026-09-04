@@ -1,23 +1,32 @@
-.stage[data-win]:not([data-win=""]) { --win-color: #ffda85; }
-.stage[data-win]:not([data-win=""]) .hud { visibility: hidden; }
+.stage[data-win="standard"] { --win-accent: #80f7b6; }
+.stage[data-win="stack"] { --win-accent: #6ce8ff; }
+.stage[data-win="double"] { --win-accent: #c89aff; }
+.stage[data-win="super"] { --win-accent: #ff9d64; }
+.stage[data-win="legendary"] { --win-accent: #ffda85; }
+.stage[data-win]:not([data-win=""]) .hud { visibility: visible; z-index: 4; }
 .round-message.win-message {
- top: 12px; bottom: auto; left: 50%; translate: -50% 0;
- width: max-content; max-width: calc(100% - 24px); padding: 0;
- background: transparent; border: 0; text-shadow: none; z-index: 2;
+ top: 50%; bottom: auto; left: 50%; translate: -50% -50%;
+ width: max-content; max-width: calc(100% - 32px); padding: 18px 34px 20px;
+ background: transparent; border: 0; z-index: 3;
+ filter: drop-shadow(0 12px 24px #030711) drop-shadow(0 0 24px #030711);
 }
-.stage .win-title { font-size: 22px; font-weight: 600; line-height: 28px; color: #fff8e8; }
-.stage .win-amount { font-size: 64px; font-weight: 600; line-height: 1.1; min-height: 71px; color: #ffda85; }
-.stage .long-payout .win-amount { font-size: 42px; }
+.stage .win-title { display:block; font-size: 25px; font-weight: 600; line-height: 30px; color: #fff8e8; text-shadow: 0 2px 12px #030711; }
+.stage .win-amount {
+ display:block; font-size: 82px; font-weight: 600; line-height: 1; min-height: 82px;
+ color: #ffda85; font-variant-numeric: tabular-nums;
+ text-shadow: 0 3px 14px #030711, 0 0 26px color-mix(in srgb,var(--win-accent) 48%,transparent);
+}
+.stage .long-payout .win-amount { font-size: 52px; min-height: 54px; }
 .win-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 @media (max-width: 700px) {
- .round-message.win-message { top: 8px; }
- .stage .win-title { font-size: 17px; line-height: 22px; }
- .stage .win-amount { font-size: 46px; min-height: 51px; }
- .stage .long-payout .win-amount { font-size: 28px; }
+ .round-message.win-message { top: 49%; max-width: calc(100% - 20px); padding: 12px 18px 14px; }
+ .stage .win-title { font-size: 18px; line-height: 22px; }
+ .stage .win-amount { font-size: 52px; min-height: 52px; }
+ .stage .long-payout .win-amount { font-size: 31px; min-height: 34px; }
 }
 @media (max-height: 700px) {
- .round-message.win-message { top: 4px; }
- .stage .win-title { font-size: 14px; line-height: 18px; }
- .stage .win-amount { font-size: 36px; min-height: 40px; }
- .stage .long-payout .win-amount { font-size: 25px; }
+ .round-message.win-message { top: 48%; padding-block: 10px; }
+ .stage .win-title { font-size: 16px; line-height: 20px; }
+ .stage .win-amount { font-size: 48px; min-height: 48px; }
+ .stage .long-payout .win-amount { font-size: 28px; min-height: 30px; }
 }

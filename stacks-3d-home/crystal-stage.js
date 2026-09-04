@@ -31,24 +31,83 @@ export function lightCrystalStage(renderer, scene) {
 
 export function crystalMaterials() {
   return [0x11bce3, 0x6659ef, 0xffbe44, 0xb43dff, 0xf43f3f].map(color => new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), .35), roughness: .085, metalness: .02, transmission: .82, thickness: .65,
-    attenuationColor: color, attenuationDistance: 1.6,
-    ior: 1.46, clearcoat: 1, clearcoatRoughness: .06, envMapIntensity: 1.8,
-    emissive: color, emissiveIntensity: .1,
+    color: new THREE.Color(0x0b141d).lerp(new THREE.Color(color), .16), roughness: .16, metalness: .42,
+    transmission: .38, thickness: .48, attenuationColor: color, attenuationDistance: 1.15,
+    ior: 1.48, clearcoat: 1, clearcoatRoughness: .08, envMapIntensity: 2.15,
+    emissive: color, emissiveIntensity: .075, transparent: true, opacity: .72, depthWrite: false,
   }));
 }
 
 export function crystalDetails(block, index) {
-  const core = new THREE.Mesh(new THREE.OctahedronGeometry(.27), new THREE.MeshPhysicalMaterial({
-    color: 0x9df5ff, emissive: 0x21bdff, emissiveIntensity: .32, metalness: .4,
-    roughness: .2,
+  const core = new THREE.Mesh(new THREE.BoxGeometry(.29, .29, .29), new THREE.MeshPhysicalMaterial({
+    color: 0x74eaff, emissive: 0x18cfff, emissiveIntensity: .85, metalness: .12,
+    roughness: .08, transmission: .58, thickness: .35, transparent: true, opacity: .86,
+    clearcoat: 1, clearcoatRoughness: .04,
   }));
-  core.rotation.set(index * .8, .6, .3); block.add(core);
+  core.rotation.set(.34 + index * .07, .58 + index * .11, .24);
+  core.renderOrder=3;
+  const innerCore = new THREE.Mesh(new THREE.BoxGeometry(.115, .115, .115), new THREE.MeshPhysicalMaterial({
+    color: 0xb783ff, emissive: 0x8d45ff, emissiveIntensity: 1.6, roughness: .12,
+    metalness: .25, transmission: .25, transparent: true, opacity: .95,
+  }));
+  innerCore.rotation.set(.35, .62, .18);innerCore.renderOrder=4;core.add(innerCore);
+
+  const windowMaterial=new THREE.MeshPhysicalMaterial({
+    color: 0x07131c, emissive: 0x0a3c52, emissiveIntensity: .18, roughness: .08,
+    metalness: .2, transmission: .72, thickness: .18, transparent: true, opacity: .48,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+
+  const faceProjectionPoints=[];
+  const outer=[[-.245,-.245],[.245,-.245],[.245,.245],[-.245,.245]];
+  const inner=[[-.105,-.105],[.105,-.105],[.105,.105],[-.105,.105]];
+  for(let i=0;i<4;i++){
+    const next=(i+1)%4;
+    faceProjectionPoints.push(new THREE.Vector3(...inner[i],.414),new THREE.Vector3(...inner[next],.414));
+    faceProjectionPoints.push(new THREE.Vector3(...outer[i],.414),new THREE.Vector3(...inner[i],.414));
+  }
+  const projectionMaterial=new THREE.LineBasicMaterial({
+    color:0x59e7ff,transparent:true,opacity:.72,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false,
+  });
+  const channelMaterial=new THREE.MeshBasicMaterial({
+    color:0x55e8ff,transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false,
+  });
+  const faceRotations=[[0,0,0],[0,Math.PI,0],[0,Math.PI/2,0],[0,-Math.PI/2,0],[-Math.PI/2,0,0],[Math.PI/2,0,0]];
+  const windows=new THREE.InstancedMesh(new THREE.PlaneGeometry(.55,.55),windowMaterial,faceRotations.length);
+  const channels=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),channelMaterial,faceRotations.length*8);
+  const projectionPoints=[];
+  const identity=new THREE.Quaternion(),matrix=new THREE.Matrix4(),localMatrix=new THREE.Matrix4();
+  let channelIndex=0;
+  faceRotations.forEach((rotation,faceIndex)=>{
+    const faceMatrix=new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rotation));
+    localMatrix.compose(new THREE.Vector3(0,0,.403),identity,new THREE.Vector3(1,1,1));
+    windows.setMatrixAt(faceIndex,matrix.multiplyMatrices(faceMatrix,localMatrix));
+    for(const point of faceProjectionPoints)projectionPoints.push(point.clone().applyMatrix4(faceMatrix));
+    for(const sx of [-1,1])for(const sy of [-1,1]){
+      localMatrix.compose(new THREE.Vector3(sx*.265,sy*.335,.432),identity,new THREE.Vector3(.15,.025,.026));
+      channels.setMatrixAt(channelIndex++,matrix.multiplyMatrices(faceMatrix,localMatrix));
+      localMatrix.compose(new THREE.Vector3(sx*.335,sy*.265,.432),identity,new THREE.Vector3(.025,.15,.026));
+      channels.setMatrixAt(channelIndex++,matrix.multiplyMatrices(faceMatrix,localMatrix));
+    }
+  });
+  windows.instanceMatrix.needsUpdate=true;windows.renderOrder=2;
+  channels.instanceMatrix.needsUpdate=true;channels.renderOrder=6;
+  const projection=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(projectionPoints),projectionMaterial);
+  projection.renderOrder=5;
+
   const crack = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-.3, .38, .418), new THREE.Vector3(-.08, .12, .419),
-    new THREE.Vector3(-.17, -.02, .419), new THREE.Vector3(.1, -.16, .419), new THREE.Vector3(.22, -.38, .419),
+    new THREE.Vector3(-.3, .38, .442), new THREE.Vector3(-.08, .12, .443),
+    new THREE.Vector3(-.17, -.02, .443), new THREE.Vector3(.1, -.16, .443), new THREE.Vector3(.22, -.38, .443),
   ]), new THREE.LineBasicMaterial({ color: 0xffd5c1, transparent: true, opacity: 0 }));
-  block.add(crack); block.userData.core = core; block.userData.crack = crack;
+  crack.renderOrder=7;
+  block.add(windows,projection,channels,core,crack);
+  block.userData.core=core;
+  block.userData.innerCore=innerCore;
+  block.userData.windowMaterial=windowMaterial;
+  block.userData.projectionMaterial=projectionMaterial;
+  block.userData.channelMaterial=channelMaterial;
+  block.userData.crack=crack;
+  block.userData.spinDirection=index%2?1:-1;
 }
 
 export function stageEffects(scene, turntable) {

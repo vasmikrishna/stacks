@@ -98,7 +98,7 @@ const assert = require('node:assert/strict');
  assert.equal(await page.locator('.win-amount').textContent(),'250.00');
  assert.equal(await page.locator('.win-detail').count(),0);
  assert.equal(await page.locator('.multiplier').textContent(),'100.00x');
- assert.equal(await page.locator('.win-title').textContent(),'YOU WIN','Tier uses prediction, not revealed 100x');
+ assert.equal(await page.locator('.win-title').textContent(),'YOU WON','Win copy stays centered while the tier changes its treatment');
  assert.equal(await page.locator('#live-multiplier').textContent(),'');
  assert.equal(await page.locator('.balance strong').textContent(),'12,600.00');
  await page.clock.fastForward(5000);
@@ -137,12 +137,12 @@ const assert = require('node:assert/strict');
  assert.deepEqual(await page.evaluate(()=>window.debrisViolations),[],'Full tower must not intersect itself or the table');
  assert(await page.evaluate(()=>window.debrisAtRest()),'Full tower must settle');
  await page.screenshot({path:__dirname+'/break-pile.png'});
- await page.evaluate(()=>window.testWin(10));
- assert.equal(await page.locator('.win-title').textContent(),'BIG WIN');
- assert.equal(await page.evaluate(()=>window.celebrationCount()),72);
- await page.evaluate(()=>window.testWin(25));
- assert.equal(await page.locator('.win-title').textContent(),'MEGA WIN');
- assert.equal(await page.evaluate(()=>window.celebrationCount()),96);
+ for(const [target,tier,count] of [[1.2,'standard',16],[1.5,'stack',30],[3,'double',48],[7,'super',72],[25,'legendary',96]]){
+  await page.evaluate(value=>window.testWin(value),target);
+  assert.equal(await page.locator('.stage').getAttribute('data-win'),tier);
+  assert.equal(await page.locator('.win-title').textContent(),'YOU WON');
+  assert.equal(await page.evaluate(()=>window.celebrationCount()),count);
+ }
  await page.clock.runFor(600);
  await page.screenshot({path:__dirname+'/mega-win.png'});
  await page.emulateMedia({reducedMotion:'reduce'});

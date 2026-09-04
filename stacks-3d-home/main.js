@@ -1,10 +1,10 @@
 import * as THREE from './vendor/three.module.js';
-import { lightCrystalStage, crystalMaterials, crystalDetails, stageEffects } from './crystal-stage.js';
+import { lightCrystalStage, crystalMaterials, crystalDetails, stageEffects } from './crystal-stage.js?v=5';
 import RAPIER from './vendor/rapier.es.js';
 await RAPIER.init();
 import { bonusStage, crashPoint, multiplierUnits, payout, resolveRound } from './math.mjs';
 import { predictionStops, predictionPosition, predictionValue, adjustPrediction } from './prediction-scale.mjs';
-import { winTiming, displayedPayout, fountainParticle } from './win-timing.mjs';
+import { winTier, winTiming, displayedPayout, fountainParticle } from './win-timing.mjs?v=2';
 import { createRecentResults } from './recent-results.js';
 
 const $ = (s) => document.querySelector(s);
@@ -209,7 +209,7 @@ $('#musicVolume').oninput=()=>{
  if(musicBus)musicBus.gain.setTargetAtTime(state.musicVolume*.1,audio.currentTime,.05);
 };
 document.addEventListener('visibilitychange',()=>{
- if(document.hidden){stopMusic();stopGrowthSound();}else if(musicStarted&&state.music)playMusic();
+ if(document.hidden){stopMusic();stopGrowthSound();stopWinSound();}else if(musicStarted&&state.music)playMusic();
 });
 window.addEventListener('pagehide',stopMusic);
 window.addEventListener('pagehide',stopGrowthSound);
@@ -222,15 +222,49 @@ function playSplashChime(){
  tone(659.25,.14);
  setTimeout(()=>tone(880,.22),140);
 }
-for (const key of ['sound','motion']) $('#'+key).onclick = () => { state[key]=!state[key]; $('#'+key).setAttribute('aria-checked',state[key]); $('#'+key+' .switch').classList.toggle('off', !state[key]); if(key==='sound'&&!state.sound)stopGrowthSound(); if(key==='motion'&&!state.motion)clearPredictionCue(); };
+const winSoundVoices=new Set();
+function stopWinSound(){
+ for(const voice of winSoundVoices){try{voice.stop();}catch{}voice.disconnect();}
+ winSoundVoices.clear();
+}
+function winSoundNote(midi,delay,duration,volume,type='sine',finish=midi){
+ const oscillator=audio.createOscillator(),gain=audio.createGain(),start=audio.currentTime+delay;
+ oscillator.type=type;
+ oscillator.frequency.setValueAtTime(440*2**((midi-69)/12),start);
+ oscillator.frequency.exponentialRampToValueAtTime(440*2**((finish-69)/12),start+duration);
+ gain.gain.setValueAtTime(.0001,start);
+ gain.gain.exponentialRampToValueAtTime(volume,start+.018);
+ gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+ oscillator.connect(gain);gain.connect(audio.destination);winSoundVoices.add(oscillator);
+ oscillator.onended=()=>{winSoundVoices.delete(oscillator);oscillator.disconnect();gain.disconnect();};
+ oscillator.start(start);oscillator.stop(start+duration+.02);
+}
+function playWinSound(target){
+ if(!state.sound||document.hidden)return;
+ try{
+  audio ||= new (window.AudioContext || window.webkitAudioContext)();
+  audio.resume().catch(()=>{});stopWinSound();
+  const {level}=winTier(target);
+  const profiles=[
+   [[76,0,.22,.026,'sine'],[83,.09,.3,.018,'sine']],
+   [[72,0,.3,.026,'sine'],[79,.11,.38,.025,'triangle'],[84,.23,.48,.018,'sine']],
+   [[60,0,.34,.02,'triangle'],[72,.04,.34,.025,'sine'],[76,.15,.4,.024,'sine'],[79,.27,.52,.021,'triangle']],
+   [[48,0,.5,.026,'triangle',55],[67,.07,.42,.025,'triangle'],[74,.2,.46,.025,'sine'],[79,.34,.55,.023,'sine'],[86,.48,.68,.018,'sine']],
+   [[43,0,.72,.032,'triangle',50],[67,.08,.65,.025,'triangle'],[72,.08,.7,.026,'triangle'],[76,.2,.75,.025,'sine'],[79,.35,.82,.024,'sine'],[84,.52,.95,.02,'sine'],[91,.7,1.05,.016,'sine']],
+  ];
+  for(const note of profiles[level])winSoundNote(...note);
+ }catch{stopWinSound();}
+}
+window.addEventListener('pagehide',stopWinSound);
+for (const key of ['sound','motion']) $('#'+key).onclick = () => { state[key]=!state[key]; $('#'+key).setAttribute('aria-checked',state[key]); $('#'+key+' .switch').classList.toggle('off', !state[key]); if(key==='sound'&&!state.sound){stopGrowthSound();stopWinSound();} if(key==='motion'&&!state.motion)clearPredictionCue(); };
 $('#turbo').onclick=()=>{
  if(state.phase==='running'||state.auto)return;
  state.turbo=!state.turbo;
  update();
 };
 function update() {
- const winTier=state.phase==='won'?(state.target>=25?'mega':state.target>=10?'big':'regular'):'';
- $('.stage').dataset.win=winTier;
+ const tier=state.phase==='won'?winTier(state.target):null;
+ $('.stage').dataset.win=tier?.id||'';
  message.classList.toggle('win-message',state.phase==='won');
  $('.balance strong').textContent=money(state.balance);
  $('.multiplier').textContent=(multiplierUnits(state.multiplier)/100).toFixed(2)+'x';
@@ -318,13 +352,12 @@ const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)clearPredictionCue();});
 const celebration=new THREE.Group();scene.add(celebration);
 const confettiGeometry=new THREE.IcosahedronGeometry(.105,0);
-const confettiMaterials=[0xffd579,0xfff4cf,0xffffff].map(color=>new THREE.MeshStandardMaterial({color,metalness:.55,roughness:.22,emissive:color,emissiveIntensity:.15,transparent:true,depthWrite:false}));
+const confettiMaterials=[0x80f7b6,0x6ce8ff,0xffd579,0xfff4cf,0xffffff].map(color=>new THREE.MeshStandardMaterial({color,metalness:.55,roughness:.22,emissive:color,emissiveIntensity:.15,transparent:true,depthWrite:false}));
 const confetti=Array.from({length:96},()=>{
  const piece=new THREE.Mesh(confettiGeometry,confettiMaterials[0]);
  piece.userData.velocity=new THREE.Vector3();piece.visible=false;celebration.add(piece);return piece;
 });
 let celebrationAge=10, winAnimation, winAmountNode;
-let winHeader=0;
 function clearCelebration(){
  celebrationAge=10;celebration.visible=false;
  winAnimation?.cancel();
@@ -334,25 +367,26 @@ function celebrateWin(){
  clearCelebration();
  winAmountNode=message.querySelector('.win-amount');
  if(!state.motion||reducedMotion.matches)return;
- const {count}=winTiming(state.target);
+ const tier=winTiming(state.target),{count,level}=tier;
  celebrationAge=0;celebration.visible=true;
  winAmountNode.textContent=money(0);
- effects.pulse(0xffd46b,true);
- // Emit in camera-facing pairs so both fountains remain outside the tower silhouette.
- celebration.rotation.y=Math.atan2(cameraDirection.x,cameraDirection.z);
+ const accents=[0x80f7b6,0x6ce8ff,0xc89aff,0xff9d64,0xffd579];
+ const palettes=[[0,1],[0,2,3],[1,2,4],[2,3,4],[0,1,2,3,4]];
+ effects.pulse(accents[level],level>=2);
+ celebration.rotation.y=0;
  confettiMaterials.forEach(material=>material.opacity=1);
  confetti.forEach((piece,index)=>{
   piece.visible=index<count;
   if(!piece.visible)return;
-  piece.material=confettiMaterials[index%4===0?2:index%4===1?1:0];
-  const point=fountainParticle(index,0,count);
+  const palette=palettes[level];piece.material=confettiMaterials[palette[index%palette.length]];
+  const point=fountainParticle(index,0,count,level);
   piece.position.set(point.x,point.y,point.z);piece.scale.setScalar(0);
  });
  winAnimation=message.animate([
-  {transform:'translateY(10px) scale(.94)',opacity:0},
-  {transform:'translateY(-1px) scale(1.015)',opacity:1,offset:.7},
+  {transform:`translateY(${18+level*2}px) scale(${.93-level*.006})`,opacity:0},
+  {transform:'translateY(-2px) scale(1.018)',opacity:1,offset:.72},
   {transform:'translateY(0) scale(1)',opacity:1},
- ],{duration:480,easing:'cubic-bezier(.16,1,.3,1)'});
+ ],{duration:480+level*65,easing:'cubic-bezier(.16,1,.3,1)'});
 }
 function animateCelebration(now){
  if(state.phase!=='won')return;
@@ -366,7 +400,7 @@ function animateCelebration(now){
  confettiMaterials.forEach(material=>material.opacity=Math.min(1,(timing.duration-elapsed)/500));
  for(const [index,piece] of confetti.entries()){
   if(!piece.visible)continue;
-  const point=fountainParticle(index,elapsed,timing.count);
+  const point=fountainParticle(index,elapsed,timing.count,timing.level);
   piece.position.set(point.x,point.y,point.z);
   piece.rotation.set(point.rotation,point.rotation*.7,point.rotation*.4);
   piece.scale.setScalar(point.y<-.3?0:point.scale);
@@ -381,14 +415,15 @@ const outline=new THREE.Shape();outline.moveTo(-.35,-.35);outline.lineTo(.35,-.3
 const geo=new THREE.ExtrudeGeometry(outline,{depth:.7,bevelEnabled:true,bevelSegments:3,steps:1,bevelSize:.065,bevelThickness:.065});geo.center();
 const edges=new THREE.EdgesGeometry(geo,18);
 const materials=crystalMaterials();
-const edgeMat=new THREE.LineBasicMaterial({color:0xb0efff,transparent:true,opacity:.5,toneMapped:false});
+const edgeMat=new THREE.LineBasicMaterial({color:0x4ccfe8,transparent:true,opacity:.24,toneMapped:false});
+const coreHighlight=new THREE.Color(0xd8fbff),coreViolet=new THREE.Color(0x9d60ff),projectionHighlight=new THREE.Color(0xc7f8ff);
 const blocks=[];
 for(let row=0;row<7;row++)for(let col=0;col<7-row;col++){
  const block=new THREE.Mesh(geo,materials[col%2]);
  block.add(new THREE.LineSegments(edges,edgeMat));
  block.userData={x:(col-(6-row)/2)*.88,y:row*.86,velocity:new THREE.Vector3((random()-.5)*5,2+random()*4,(random()-.5)*4)};
  block.castShadow=true;block.receiveShadow=true;crystalDetails(block,blocks.length);
- block.position.set(block.userData.x,block.userData.y,0); stack.add(block); blocks.push(block);
+ block.position.set(block.userData.x,block.userData.y,0);stack.add(block);blocks.push(block);
 }
 const platform=new THREE.Mesh(new THREE.CylinderGeometry(3.7,4,.25,64),new THREE.MeshStandardMaterial({color:0x17202a,metalness:.65,roughness:.3}));platform.position.y=-.59;scene.add(platform);
 geo.computeBoundingBox();
@@ -456,6 +491,8 @@ function resize(){const w=mount.clientWidth,h=mount.clientHeight;renderer.setSiz
 let visibleCount=10;
 let cameraHeight=3.5;
 const cameraDirection=new THREE.Vector3(4,3.2,9).normalize();
+const winCameraDirection=new THREE.Vector3(0,2.7,10).normalize();
+let cameraDistance=8.4;
 function rebuild(count){
  resetDebris();
  const previousCount=visibleCount;
@@ -556,7 +593,7 @@ function start(){
  }
  if(state.auto)state.autoRound=state.autoTotal-state.remaining+1;
  state.bet=bet;state.target=target;state.balance-=bet;state.payout=0;state.multiplier=1;
- clearCelebration();
+ clearCelebration();stopWinSound();
  // Local demo outcome. Production must obtain the outcome and payout from Stake.
  state.breakAt=crashPoint(crypto.getRandomValues(new Uint32Array(1))[0]);
  state.started=performance.now();state.speed=state.turbo? .36:.14;state.phase='running';state.bonus=0;
@@ -572,18 +609,18 @@ function settle(won, at){
  clearPredictionCue();state.predictionReached=won;
  const effectiveUnits=multiplierUnits(state.target);
  state.phase=won?'won':'broken';state.multiplier=at;state.bonus=bonusStage(at).level;state.payout=won?payout(state.bet,effectiveUnits):0;state.balance+=state.payout;state.ended=performance.now();
+ if(won){state.winRotationFrom=turntable.rotation.y;state.winRotationTo=Math.round(turntable.rotation.y/Math.PI)*Math.PI;}
  if(!won){state.breakDelay=0;if(!state.motion||reducedMotion.matches)startDebris();}
  message.classList.toggle('broken',!won);
  message.textContent='';
  if(won){
-  const title=state.target>=25?'MEGA WIN':state.target>=10?'BIG WIN':'YOU WIN';
+  const tier=winTier(state.target),title='YOU WON';
   message.classList.toggle('long-payout',money(state.payout).length>12);
-  message.innerHTML=`<span class="win-title" aria-hidden="true">${title}</span><strong class="win-amount" aria-hidden="true">${money(state.payout)}</strong><span class="win-announcement">${title}. Payout ${money(state.payout)}.</span>`;
+  message.innerHTML=`<span class="win-title" aria-hidden="true">${title}</span><strong class="win-amount" aria-hidden="true">${money(state.payout)}</strong><span class="win-announcement">${tier.label}. ${title}. Payout ${money(state.payout)}.</span>`;
   $('.stage').append(message);
-  celebrateWin();
+  celebrateWin();playWinSound(state.target);
  }
- tone(won?750:120,.3);
- if(won&&state.target>=10){tone(1000,.45);tone(1250,.65);}
+ if(!won)tone(120,.3);
  state.history.unshift({at,target:state.target,bet:state.bet,payout:state.payout,won});state.history=state.history.slice(0,30);
  renderRoundHistory();
  if(state.auto){state.remaining--;const delta=state.balance-state.autoStart;if(state.remaining<=0||delta>=state.profit||delta<=-state.loss||state.balance<state.bet){state.auto=false;state.autoRound=0;state.autoTotal=0;}else nextRound=setTimeout(start,won?winTiming(state.target).duration+400:1800);}
@@ -620,17 +657,35 @@ function animate(now){
  const broken=state.phase==='broken';
  const moving=state.motion&&!reducedMotion.matches;
  if(broken&&moving){state.breakDelay=(state.breakDelay||0)+dt;if(state.breakDelay>=.22&&!debrisWorld)startDebris();if(debrisWorld)animateDebris(dt);}
- const palette=broken?4:state.phase==='won'?2:state.bonus===4?2:state.bonus===3?4:state.bonus===2?3:state.bonus===1?2:-1;
+ const palette=broken?4:state.phase==='won'?-1:state.bonus===4?2:state.bonus===3?4:state.bonus===2?3:state.bonus===1?2:-1;
  blocks.forEach((b,i)=>{
   b.visible=i<visibleCount;b.material=materials[palette<0?i%2:palette];
-  const core=b.userData.core,crack=b.userData.crack;
-  core.material.color.copy(b.material.color);core.material.emissive.copy(b.material.color);
-  if(moving)core.rotation.y+=dt*.3;
+  const core=b.userData.core,innerCore=b.userData.innerCore,crack=b.userData.crack;
+  const multiplierEnergy=Math.min(1,Math.log2(Math.max(1,state.multiplier))/8);
+  const coreSpeed=state.phase==='running'?.42+multiplierEnergy*.72:state.phase==='won'?.24:.12;
+  if(moving){
+   core.rotation.x+=dt*coreSpeed*.58*b.userData.spinDirection;
+   core.rotation.y+=dt*coreSpeed*b.userData.spinDirection;
+   innerCore.rotation.x-=dt*coreSpeed*1.25;
+   innerCore.rotation.z+=dt*coreSpeed*.85;
+  }
   crack.material.opacity=broken?Math.max(0,1-(state.breakDelay||0)/1.4):0;
-  core.material.opacity=broken?Math.max(.08,.6-(state.breakDelay||0)*.22):.6;
+  core.material.color.copy(b.material.emissive).lerp(coreHighlight,.34);
+  core.material.emissive.copy(b.material.emissive);
+  innerCore.material.color.copy(b.material.emissive).lerp(coreViolet,.68);
+  innerCore.material.emissive.copy(innerCore.material.color);
+  const winPulse=state.phase==='won'&&moving?.22+.18*Math.sin((now-state.ended)*.009-i*.22):0;
+  core.material.opacity=broken?Math.max(.08,.86-(state.breakDelay||0)*.32):.86;
   const winLight=state.phase==='won'&&moving?Math.max(0,1-Math.abs((now-state.ended)/1000-b.userData.y*.08-.25)/.25):0;
-  core.material.emissiveIntensity=broken?Math.max(.01,.32-(state.breakDelay||0)*.15):.32+winLight*.5;
-  b.material.emissiveIntensity=broken?Math.max(.015,.1-(state.breakDelay||0)*.04):.1;
+  core.material.emissiveIntensity=broken?Math.max(.03,.55-(state.breakDelay||0)*.22):.65+multiplierEnergy*.55+winLight*.9+winPulse;
+  innerCore.material.emissiveIntensity=broken?.15:1.25+multiplierEnergy*.7+winLight*.8+winPulse;
+  b.userData.channelMaterial.color.copy(b.material.emissive);
+  b.userData.channelMaterial.opacity=broken?Math.max(.08,.9-(state.breakDelay||0)*.4):.68+multiplierEnergy*.22+winLight*.1;
+  b.userData.projectionMaterial.color.copy(b.material.emissive).lerp(projectionHighlight,.24);
+  b.userData.projectionMaterial.opacity=broken?Math.max(.05,.72-(state.breakDelay||0)*.32):.48+multiplierEnergy*.24+winLight*.2;
+  b.userData.windowMaterial.emissive.copy(b.material.emissive);
+  b.userData.windowMaterial.emissiveIntensity=broken?.04:.12+multiplierEnergy*.18+winLight*.2;
+  b.material.emissiveIntensity=broken?Math.max(.012,.055-(state.breakDelay||0)*.025):.055+winLight*.08;
   if(!broken){
    const oldAge=b.userData.landingAge;b.userData.landingAge+=dt;
    const t=Math.max(0,b.userData.landingAge);
@@ -642,28 +697,33 @@ function animate(now){
   }
  });
  if(moving&&(state.phase==='running'||document.body.classList.contains('intro-active')))turntable.rotation.y+=dt*(state.phase==='running'?.22:.12);
+ const rawWinProgress=state.phase==='won'?Math.min(1,Math.max(0,(now-state.ended)/700)):0;
+ const winProgress=state.phase==='won'?(moving?1-(1-rawWinProgress)**3:1):0;
+ if(state.phase==='won')turntable.rotation.y=moving
+  ?THREE.MathUtils.lerp(state.winRotationFrom,state.winRotationTo,winProgress)
+  :state.winRotationTo;
  const desiredHeight=Math.ceil((Math.sqrt(8*visibleCount+1)-1)/2)*.86;
  cameraHeight=moving?THREE.MathUtils.lerp(cameraHeight,desiredHeight,Math.min(1,dt*2)):desiredHeight;
- const headerTarget=state.phase==='won'?Math.min(mount.clientHeight*.3,mount.clientWidth<700?92:126):0;
- winHeader=moving?THREE.MathUtils.lerp(winHeader,headerTarget,Math.min(1,dt*10)):headerTarget;
- const renderHeight=Math.max(1,mount.clientHeight-winHeader);
+ const renderHeight=Math.max(1,mount.clientHeight);
  camera.aspect=mount.clientWidth/renderHeight;camera.updateProjectionMatrix();
  renderer.setViewport(0,0,mount.clientWidth,renderHeight);
  const tan=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
- const aim=new THREE.Vector3(0,cameraHeight*(state.phase==='won'?.28:.36),0);
- const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),cameraDirection).normalize();
- const up=new THREE.Vector3().crossVectors(cameraDirection,right);
- let distance=8.4;
+ const viewDirection=cameraDirection.clone().lerp(winCameraDirection,winProgress).normalize();
+ const aim=new THREE.Vector3(0,cameraHeight*(state.phase==='won'?.38:.36),0);
+ const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),viewDirection).normalize();
+ const up=new THREE.Vector3().crossVectors(viewDirection,right);
+ let distance=state.phase==='won'?7.45:8.1;
  // Fit both the rotating platform and tower inside the clear region of the arena.
  const bounds=[];
  for(let i=0;i<12;i++)bounds.push(new THREE.Vector3(Math.cos(i*Math.PI/6)*4,-.8,Math.sin(i*Math.PI/6)*4));
  if(state.phase==='won'){
   for(const block of blocks.filter(block=>block.visible))for(const x of [-.44,.44])for(const y of [-.44,.44])for(const z of [-.44,.44])bounds.push(block.position.clone().add(new THREE.Vector3(x,y,z)));
-  for(const x of [-4.5,4.5])bounds.push(right.clone().multiplyScalar(x).add(new THREE.Vector3(0,5.1,0)));
  }else for(const x of [-3.2,3.2])for(const z of [-.6,.6])bounds.push(new THREE.Vector3(x,Math.max(cameraHeight,desiredHeight)+.6,z));
- for(const point of bounds){point.sub(aim);distance=Math.max(distance,Math.abs(point.dot(up))/(tan*(state.phase==='won'?.92:.78))+point.dot(cameraDirection),Math.abs(point.dot(right))/(tan*camera.aspect*.9)+point.dot(cameraDirection));}
- camera.position.copy(cameraDirection).multiplyScalar(distance).add(aim);camera.lookAt(aim);
- const stageColor=state.phase==='won'?0xffd579:[0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][state.bonus||0];
+ for(const point of bounds){point.sub(aim);distance=Math.max(distance,Math.abs(point.dot(up))/(tan*(state.phase==='won'?.92:.82))+point.dot(viewDirection),Math.abs(point.dot(right))/(tan*camera.aspect*(state.phase==='won'?.92:.88))+point.dot(viewDirection));}
+ cameraDistance=moving?THREE.MathUtils.lerp(cameraDistance,distance,Math.min(1,dt*(state.phase==='won'?3:5))):distance;
+ camera.position.copy(viewDirection).multiplyScalar(cameraDistance).add(aim);camera.lookAt(aim);
+ const tierAccent=[0x80f7b6,0x6ce8ff,0xc89aff,0xff9d64,0xffd579];
+ const stageColor=state.phase==='won'?tierAccent[winTier(state.target).level]:[0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][state.bonus||0];
  ring.material.color.lerp(new THREE.Color(broken?0xff515c:stageColor),Math.min(1,dt*4));
  effects.update(dt,moving,broken?0xff515c:stageColor,state.bonus,cameraHeight,state.phase==='running');
  $('.multiplier').style.color=broken?'#ff515c':state.phase==='won'?'#4cef97':'#e8faff';
