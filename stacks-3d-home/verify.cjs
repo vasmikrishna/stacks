@@ -9,6 +9,8 @@ const assert = require('node:assert/strict');
  await page.route('**/main.js',async route=>{
   const response=await route.fetch();
   await route.fulfill({response,body:await response.text()+`
+   // Physics and payout regression uses a small canvas; visual-check covers full resolution.
+   renderer.setPixelRatio(.35); renderer.transmissionResolutionScale=.25; renderer.shadowMap.enabled=false; resize();
    const originalDebris=animateDebris;
    const half=geo.boundingBox.getSize(new THREE.Vector3()).multiplyScalar(.5);
    const visualShape=new RAPIER.Cuboid(half.x,half.y,half.z);

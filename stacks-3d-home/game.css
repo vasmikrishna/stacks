@@ -53,10 +53,31 @@ button:focus-visible, input:focus-visible { outline: 2px solid #63dcff; outline-
 .cashout-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .cashout-toggle input { margin: 0; accent-color: #35f07d; }
 .round-message { padding: 0 12px; }
+.app { grid-template-rows: 64px minmax(0,1fr) 88px 100px; }
+#stack-scene { opacity: 1; }
+.hud .multiplier { font-size: 50px; font-variant-numeric: tabular-nums; text-shadow: 0 2px 16px #080c12; }
+.hud .label { color: #a9b9c1; font-size: 10px; }
+.stage-status strong { font-variant-numeric: tabular-nums; }
+.round-message { text-shadow: 0 2px 8px #000; }
+.round-message.win-message { width: max-content; max-width: calc(100% - 24px); left: 50%; translate: -50% 0; border: 0; background: transparent; padding: 8px 24px; }
+.win-title { font-size: 13px; }
+.win-amount { font-size: 34px; }
+.score-burst { position: absolute; inset: 70px 0 84px; overflow: hidden; pointer-events: none; }
+.score-burst span { position: absolute; left: 50%; top: 55%; color: #e4fcff; font-size: 20px; font-weight: 800; white-space: nowrap; text-shadow: 0 2px 6px #06141b, 0 0 16px #00c8ed; }
+.bottom-playbar { box-shadow: none; background: #11181df5; border-color: #2d3b41; }
+.play-button { background: #35ed8b; transition: background 120ms ease; }
+.play-button:hover:not(:disabled) { background: #6cf4aa; }
+@media(max-width:700px) {
+ .app { grid-template-rows: 60px minmax(0,1fr) 88px 148px; }
+ .hud .multiplier { font-size: 34px; }
+ .win-amount { font-size: 27px; }
+ .score-burst span { font-size: 15px; }
+}
 .settings-drawer { z-index: 5; max-height: calc(100dvh - 160px); overflow: auto; visibility: hidden; }
 .settings-drawer.open { visibility: visible; }
 .drawer-row { width: 100%; text-align: left; gap: 12px; flex-shrink: 0; }
 .drawer-row input[type=number] { width: 82px; padding: 6px; background: #18212b; color: white; border: 1px solid #46535f; border-radius: 4px; }
+.drawer-row #musicVolume { width: 120px; accent-color: #35ed8b; }
 .drawer-list p { font-size: 13px; color: #a7b7c5; line-height: 1.6; }
 .drawer-list summary { cursor: pointer; padding: 12px 0; }
 .history-row { display: flex; justify-content: space-between; font-size: 12px; padding: 9px 0; border-bottom: 1px solid #24323d; }

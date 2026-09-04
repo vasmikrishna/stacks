@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.js';
+import { lightCrystalStage, crystalMaterials, crystalDetails, stageEffects, scoreBurst } from './crystal-stage.js';
 import RAPIER from './vendor/rapier.es.js';
 await RAPIER.init();
 import { bonusStage, crashPoint, multiplierUnits, payout, resolveRound } from './math.mjs';
@@ -6,7 +7,7 @@ import { bonusStage, crashPoint, multiplierUnits, payout, resolveRound } from '.
 const $ = (s) => document.querySelector(s);
 const money = (n) => (n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const random = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
-const state = { balance: 1245000, phase: 'idle', multiplier: 1, bet: 0, auto: false, remaining: 0, history: [], sound: true, music: true, motion: true, turbo: false };
+const state = { balance: 1245000, phase: 'idle', multiplier: 1, bet: 0, auto: false, remaining: 0, history: [], sound: true, music: true, musicVolume: .35, motion: true, turbo: false };
 const steppers = document.querySelectorAll('.stepper');
 steppers[0].innerHTML = '<button aria-label="Halve bet">−</button><input id="bet" class="value" type="number" aria-label="Bet amount" min="1" step="1" value="100"><button aria-label="Double bet">+</button>';
 steppers[1].classList.add('prediction-control');
@@ -35,6 +36,7 @@ $('.stage').append(message);
 $('.drawer-list').innerHTML = `
  <button class="drawer-row" id="sound" role="switch" aria-checked="true">Sound<span class="switch"></span></button>
  <button class="drawer-row" id="music" role="switch" aria-checked="true">Background music<span class="switch"></span></button>
+ <label class="drawer-row">Music volume<input id="musicVolume" type="range" min="0" max="100" step="1" value="35" aria-label="Music volume"></label>
  <button class="drawer-row" id="motion" role="switch" aria-checked="true">Motion<span class="switch"></span></button>
  <button class="drawer-row" id="turbo" role="switch" aria-checked="false">Turbo<span class="switch off"></span></button>
  <label class="drawer-row">Autoplay rounds<input id="rounds" type="number" min="1" max="100" value="10"></label>
@@ -47,11 +49,11 @@ $('.drawer-list').innerHTML = `
 let audio;
 let musicTimer, musicBus, musicStarted=false, musicStep=0, nextMusicNote=0;
 const musicVoices=new Set();
-function musicNote(midi,when,duration,volume,type='sine'){
+function musicNote(midi,when,duration,volume,type='sine',attack=.65){
  const oscillator=audio.createOscillator(), envelope=audio.createGain();
  oscillator.type=type;oscillator.frequency.value=440*2**((midi-69)/12);
  envelope.gain.setValueAtTime(0,when);
- envelope.gain.linearRampToValueAtTime(volume,when+.04);
+ envelope.gain.linearRampToValueAtTime(volume,when+attack);
  envelope.gain.exponentialRampToValueAtTime(.0001,when+duration);
  oscillator.connect(envelope);envelope.connect(musicBus);
  musicVoices.add(oscillator);
@@ -66,25 +68,25 @@ function stopMusic(){
 }
 function playMusic(){
  musicStarted=true;
- if(!state.music || document.hidden || musicTimer!==undefined)return;
+ if(state.phase!=='running' || !state.music || document.hidden || musicTimer!==undefined)return;
  try {
   audio ||= new (window.AudioContext || window.webkitAudioContext)();
   audio.resume().catch(()=>{});
-  musicBus=audio.createGain();musicBus.gain.value=.16;musicBus.connect(audio.destination);
+  musicBus=audio.createGain();musicBus.gain.value=state.musicVolume*.1;musicBus.connect(audio.destination);
+  musicStep=0;
   nextMusicNote=audio.currentTime+.05;
-  const chords=[[48,55,60,64],[45,52,57,60],[41,48,53,57],[43,50,55,59]];
-  const pattern=[2,3,1,3,2,1,3,1];
+  // Slow, soft chord swells with one sparse upper note per phrase.
+  const chords=[[50,57,60,64],[48,55,59,62],[45,52,55,59],[43,50,57,60]];
   const schedule=()=>{
    if(audio.state!=='running')return;
    nextMusicNote=Math.max(nextMusicNote,audio.currentTime+.02);
    while(nextMusicNote<audio.currentTime+.18){
     const chord=chords[Math.floor(musicStep/8)%chords.length];
-    musicNote(chord[pattern[musicStep%8]]+12,nextMusicNote,.55,.12);
     if(musicStep%8===0){
-     musicNote(chord[0]-12,nextMusicNote,2.3,.22);
-     for(const note of chord.slice(1))musicNote(note,nextMusicNote,2.2,.06);
+     for(const note of chord)musicNote(note,nextMusicNote,5.8,.075);
     }
-    musicStep=(musicStep+1)%32;nextMusicNote+=.3125;
+    if(musicStep%8===4)musicNote(chord[3]+12,nextMusicNote,2.2,.045,'sine',.08);
+    musicStep=(musicStep+1)%32;nextMusicNote+=.75;
    }
   };
   schedule();musicTimer=setInterval(schedule,100);
@@ -95,6 +97,10 @@ $('#music').onclick=()=>{
  $('#music').setAttribute('aria-checked',state.music);
  $('#music .switch').classList.toggle('off',!state.music);
  if(state.music)playMusic();else stopMusic();
+};
+$('#musicVolume').oninput=()=>{
+ state.musicVolume=Number($('#musicVolume').value)/100;
+ if(musicBus)musicBus.gain.setTargetAtTime(state.musicVolume*.1,audio.currentTime,.05);
 };
 document.addEventListener('visibilitychange',()=>{
  if(document.hidden)stopMusic();else if(musicStarted&&state.music)playMusic();
@@ -121,7 +127,7 @@ function update() {
  action.disabled=state.phase==='running';
  auto.textContent=state.auto ? `On · ${state.remaining || $('#rounds').value}` : 'Off';
  auto.setAttribute('aria-checked',state.auto);
- for(const input of document.querySelectorAll('.stepper input, .stepper button, .drawer-row input, #reset')) input.disabled=state.phase==='running' || state.auto;
+ for(const input of document.querySelectorAll('.stepper input, .stepper button, .drawer-row input:not(#musicVolume), #reset')) input.disabled=state.phase==='running' || state.auto;
 }
 steppers.forEach((el,i)=>{ const input=el.querySelector('input'); const buttons=el.querySelectorAll('button'); buttons.forEach((b,j)=>b.onclick=()=>{ const v=Number(input.value)||Number(input.min); input.value=i ? Math.min(1000,Math.max(1.01,v+(j?.25:-.25))).toFixed(2) : Math.min(100000,Math.max(1,j?v*2:v/2)).toFixed(2); }); });
 $('#target').oninput=()=>{
@@ -153,9 +159,11 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 mount.append(renderer.domElement);
 const scene=new THREE.Scene();
+lightCrystalStage(renderer,scene);
+const scoreEffect=scoreBurst($('.stage'));
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const celebration=new THREE.Group();scene.add(celebration);
-const confettiGeometry=new THREE.PlaneGeometry(.10,.18);
+const confettiGeometry=new THREE.OctahedronGeometry(.075);
 const confettiMaterials=[0x4cef97,0x53dcff,0xffda65,0xff8ed4,0xffffff].map(color=>new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide}));
 const confetti=Array.from({length:120},()=>{
  const piece=new THREE.Mesh(confettiGeometry,confettiMaterials[0]);
@@ -164,6 +172,7 @@ const confetti=Array.from({length:120},()=>{
 let celebrationAge=10, winAnimation;
 function clearCelebration(){
  celebrationAge=10;celebration.visible=false;
+ scoreEffect.clear();
  winAnimation?.cancel();
 }
 function celebrateWin(){
@@ -172,6 +181,8 @@ function celebrateWin(){
  const tier=state.target>=25?2:state.target>=10?1:0;
  const count=[24,64,120][tier],colors=[[0,1,4],[2,4],[3,2,4]][tier];
  celebrationAge=0;celebration.visible=true;
+ scoreEffect.play(state.target,money(state.payout),true);
+ effects.pulse(0xffd46b,true);
  confetti.forEach((piece,index)=>{
   piece.visible=index<count;
   if(!piece.visible)return;
@@ -199,20 +210,21 @@ function animateCelebration(dt){
  }
 }
 const camera=new THREE.PerspectiveCamera(38,1,.1,100);
-scene.add(new THREE.HemisphereLight(0xb3edff,0x20132d,3));
-const light=new THREE.DirectionalLight(0xffffff,5);light.position.set(-3,7,5);scene.add(light);
-const fill=new THREE.PointLight(0xb044ff,60);fill.position.set(3,2,1);scene.add(fill);
+scene.add(new THREE.HemisphereLight(0xb3edff,0x20132d,.8));
+const light=new THREE.DirectionalLight(0xf0faff,3);light.position.set(-3,7,5);light.castShadow=true;light.shadow.mapSize.set(1024,1024);light.shadow.camera.left=-6;light.shadow.camera.right=6;light.shadow.camera.top=8;light.shadow.camera.bottom=-6;light.shadow.normalBias=.035;scene.add(light);
+const fill=new THREE.PointLight(0x8963ff,25);fill.position.set(3,3,1);scene.add(fill);
 const stack=new THREE.Group(); scene.add(stack);
 const outline=new THREE.Shape();outline.moveTo(-.35,-.35);outline.lineTo(.35,-.35);outline.lineTo(.35,.35);outline.lineTo(-.35,.35);outline.closePath();
 const geo=new THREE.ExtrudeGeometry(outline,{depth:.7,bevelEnabled:true,bevelSegments:3,steps:1,bevelSize:.065,bevelThickness:.065});geo.center();
-const edges=new THREE.EdgesGeometry(geo);
-const materials=[0x13baff,0x6934eb,0xffb82e,0xd947ff,0xff3c48].map(color=>new THREE.MeshPhysicalMaterial({color,metalness:.35,roughness:.13,emissive:color,emissiveIntensity:.12,clearcoat:1,transparent:true,opacity:.94}));
-const edgeMat=new THREE.LineBasicMaterial({color:0xb0efff,transparent:true,opacity:.65});
+const edges=new THREE.EdgesGeometry(geo,18);
+const materials=crystalMaterials();
+const edgeMat=new THREE.LineBasicMaterial({color:0xb0efff,transparent:true,opacity:.5,toneMapped:false});
 const blocks=[];
 for(let row=0;row<7;row++)for(let col=0;col<7-row;col++){
  const block=new THREE.Mesh(geo,materials[col%2]);
  block.add(new THREE.LineSegments(edges,edgeMat));
  block.userData={x:(col-(6-row)/2)*.88,y:row*.86,velocity:new THREE.Vector3((random()-.5)*5,2+random()*4,(random()-.5)*4)};
+ block.castShadow=true;block.receiveShadow=true;crystalDetails(block,blocks.length);
  block.position.set(block.userData.x,block.userData.y,0); stack.add(block); blocks.push(block);
 }
 const platform=new THREE.Mesh(new THREE.CylinderGeometry(3.7,4,.25,64),new THREE.MeshStandardMaterial({color:0x17202a,metalness:.65,roughness:.3}));platform.position.y=-.59;scene.add(platform);
@@ -239,6 +251,9 @@ function startDebris(){
  }
  for(const [index,block] of blocks.entries()){
   if(!block.visible)continue;
+  // Finish layout placement before handing blocks to the collision solver.
+  block.position.set(block.userData.x,block.userData.y,0);
+  block.rotation.set(0,0,0);
   block.scale.setScalar(1);
   const velocity=block.userData.velocity;
   const body=debrisWorld.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
@@ -267,22 +282,33 @@ function animateDebris(dt){
 }
 const ring=new THREE.Mesh(new THREE.TorusGeometry(3.8,.022,8,100),new THREE.MeshBasicMaterial({color:0x36ccff}));ring.rotation.x=Math.PI/2;ring.position.y=-.44;scene.add(ring);
 const turntable=new THREE.Group();scene.add(turntable);turntable.add(platform,ring,stack);
+platform.receiveShadow=true;
+const effects=stageEffects(scene,turntable);
 // Asymmetric rim inlays make rotation visible on the circular platform.
 for(let i=0;i<12;i++){
  const mark=new THREE.Mesh(new THREE.BoxGeometry(i%3===0?.28:.12,.025,.07),new THREE.MeshBasicMaterial({color:i%3===0?0xffcc66:0x43bddd}));
  const angle=i*Math.PI/6;mark.position.set(Math.cos(angle)*3.55,-.447,Math.sin(angle)*3.55);mark.rotation.y=-angle;turntable.add(mark);
 }
-function resize(){const w=mount.clientWidth,h=mount.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.position.set(8,6,Math.max(13,12/camera.aspect));camera.lookAt(0,1.8,0);camera.updateProjectionMatrix();}new ResizeObserver(resize).observe(mount);resize();
+function resize(){const w=mount.clientWidth,h=mount.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}new ResizeObserver(resize).observe(mount);resize();
 let visibleCount=10;
+let cameraHeight=3.5;
+const cameraDirection=new THREE.Vector3(4,3.2,9).normalize();
 function rebuild(count){
  resetDebris();
+ const previousCount=visibleCount;
  visibleCount=count;
  const rows=Math.ceil((Math.sqrt(8*count+1)-1)/2);
  let index=0;
  for(let row=0;row<rows;row++)for(let col=0;col<rows-row;col++){
   const b=blocks[index++];b.userData.x=(col-(rows-row-1)/2)*.88;b.userData.y=row*.86;
  }
- blocks.forEach((b,i)=>{b.visible=i<count;b.userData.resting=false;b.position.set(b.userData.x,b.userData.y+(i===count-1&&state.motion?2:0),0);b.rotation.set(0,0,0);b.userData.velocity.set((random()-.5)*5,2+random()*4,(random()-.5)*4);});
+ blocks.forEach((b,i)=>{
+  const fresh=count<=previousCount||i>=previousCount;
+  b.visible=i<count;b.userData.resting=false;b.userData.crack.material.opacity=0;
+  b.userData.landingAge=fresh?-.06*Math.max(0,i-previousCount):1;
+  if(fresh)b.position.set(b.userData.x,b.userData.y+(state.motion&&!reducedMotion.matches?1.8:0),0);
+  b.rotation.set(0,0,0);b.scale.setScalar(1);b.userData.velocity.set((random()-.5)*5,2+random()*4,(random()-.5)*4);
+ });
 }
 function start(){
  if(state.phase==='running')return;
@@ -305,9 +331,10 @@ function start(){
 }
 function settle(won, at){
  if(state.phase!=='running')return;
+ stopMusic();
  const effectiveUnits=multiplierUnits(state.target);
  state.phase=won?'won':'broken';state.multiplier=at;state.bonus=bonusStage(at).level;state.payout=won?payout(state.bet,effectiveUnits):0;state.balance+=state.payout;state.ended=performance.now();
- if(!won)startDebris();
+ if(!won){state.breakDelay=0;if(!state.motion||reducedMotion.matches)startDebris();}
  message.classList.toggle('broken',!won);
  message.textContent=won?'':`Lost · Prediction ${state.target.toFixed(2)}x · Result ${(multiplierUnits(at)/100).toFixed(2)}x`;
  if(won){
@@ -340,7 +367,7 @@ function tick(now){
  const count=Math.min(28,1+Math.floor(Math.log(next)*6)*(stage.level>=2?2:1)+(stage.level>=1?3:0));
  if(count>visibleCount){rebuild(count);tone(300+count*24);}
  const bonus=stage.level;
- if(bonus!==state.bonus){state.bonus=bonus;tone(880,.2);}
+ if(bonus!==state.bonus){state.bonus=bonus;effects.pulse([0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][bonus],true);tone(880,.2);}
  message.textContent=`${stage.label} · ${next>=state.target?'Prediction reached':'Prediction'} ${state.target.toFixed(2)}x`;
  update();
 }
@@ -350,13 +377,45 @@ function animate(now){
  const dt=Math.min((now-last)/1000,.05);last=now;tick(now);
  animateCelebration(dt);
  const broken=state.phase==='broken';
- if(broken&&state.motion)animateDebris(dt);
+ const moving=state.motion&&!reducedMotion.matches;
+ if(broken&&moving){state.breakDelay=(state.breakDelay||0)+dt;if(state.breakDelay>=.22&&!debrisWorld)startDebris();if(debrisWorld)animateDebris(dt);}
  const palette=broken?4:state.bonus===4?2:state.bonus===3?4:state.bonus===2?3:state.bonus===1?2:-1;
  blocks.forEach((b,i)=>{
   b.visible=i<visibleCount;b.material=materials[palette<0?i%2:palette];
-  if(!broken){b.position.y=THREE.MathUtils.lerp(b.position.y,b.userData.y,Math.min(1,dt*8));b.scale.setScalar(state.motion?1+Math.sin(now*.002+i)*.012:1);}
+  const core=b.userData.core,crack=b.userData.crack;
+  core.material.color.copy(b.material.color);core.material.emissive.copy(b.material.color);
+  if(moving)core.rotation.y+=dt*.3;
+  crack.material.opacity=broken?Math.max(0,1-(state.breakDelay||0)/1.4):0;
+  core.material.opacity=broken?Math.max(.08,.6-(state.breakDelay||0)*.22):.6;
+  core.material.emissiveIntensity=broken?Math.max(.01,.32-(state.breakDelay||0)*.15):.32;
+  b.material.emissiveIntensity=broken?Math.max(.015,.1-(state.breakDelay||0)*.04):.1;
+  if(!broken){
+   const oldAge=b.userData.landingAge;b.userData.landingAge+=dt;
+   const t=Math.max(0,b.userData.landingAge);
+   let offset=t<.36?1.8*(1-(t/.36)**2):t<.66?Math.sin((t-.36)/.3*Math.PI)*.14:0;
+   b.position.y=b.userData.y+(moving?offset:0);
+   b.position.x=moving?THREE.MathUtils.lerp(b.position.x,b.userData.x,Math.min(1,dt*12)):b.userData.x;
+   if(b.visible&&moving&&oldAge<.36&&t>=.36)effects.pulse(b.material.color);
+   b.scale.setScalar(1);
+  }
  });
- if(state.motion&&state.phase==='running')turntable.rotation.y+=dt*.32;
+ if(moving&&state.phase==='running')turntable.rotation.y+=dt*.22;
+ const desiredHeight=Math.ceil((Math.sqrt(8*visibleCount+1)-1)/2)*.86;
+ cameraHeight=moving?THREE.MathUtils.lerp(cameraHeight,desiredHeight,Math.min(1,dt*2)):desiredHeight;
+ const tan=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+ const aim=new THREE.Vector3(0,cameraHeight*.36,0);
+ const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),cameraDirection).normalize();
+ const up=new THREE.Vector3().crossVectors(cameraDirection,right);
+ let distance=8.4;
+ // Fit both the rotating platform and tower inside the clear region of the arena.
+ const bounds=[];
+ for(let i=0;i<12;i++)bounds.push(new THREE.Vector3(Math.cos(i*Math.PI/6)*4,-.8,Math.sin(i*Math.PI/6)*4));
+ for(const x of [-3.2,3.2])for(const z of [-.6,.6])bounds.push(new THREE.Vector3(x,Math.max(cameraHeight,desiredHeight)+.6,z));
+ for(const point of bounds){point.sub(aim);distance=Math.max(distance,Math.abs(point.dot(up))/(tan*.78)+point.dot(cameraDirection),Math.abs(point.dot(right))/(tan*camera.aspect*.9)+point.dot(cameraDirection));}
+ camera.position.copy(cameraDirection).multiplyScalar(distance).add(aim);camera.lookAt(aim);
+ const stageColor=[0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][state.bonus||0];
+ ring.material.color.lerp(new THREE.Color(broken?0xff515c:stageColor),Math.min(1,dt*4));
+ effects.update(dt,moving,broken?0xff515c:stageColor,state.bonus,cameraHeight,state.phase==='running');
  $('.multiplier').style.color=broken?'#ff515c':state.phase==='won'?'#4cef97':'#e8faff';
  renderer.render(scene,camera);requestAnimationFrame(animate);
 }
