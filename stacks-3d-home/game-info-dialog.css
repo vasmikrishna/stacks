@@ -218,6 +218,30 @@
 .history-status { font-weight: 600; text-transform: uppercase; }
 .history-status.is-win { color: #67e991; }
 .history-status.is-loss { color: #ff6874; }
+.history-table th:last-child,
+.history-table td:last-child { width: 54px; padding-right: 0; }
+.history-replay {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  place-items: center;
+  border: 1px solid #344b57;
+  border-radius: 4px;
+  background: #0d1821;
+}
+.history-replay:hover:not(:disabled) { border-color: #63e7f1; background: #13252e; }
+.history-replay:disabled { cursor: not-allowed; opacity: .42; }
+.history-replay img { width: 16px; height: 16px; filter: invert(1); }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .history-empty { display: grid; place-items: center; min-height: 250px; color: #8498a5; font-size: 16px; }
 .history-empty[hidden] { display: none; }
 .game-info-footer {

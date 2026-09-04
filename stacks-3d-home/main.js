@@ -6,6 +6,7 @@ import { bonusStage, crashPoint, multiplierUnits, payout, resolveRound } from '.
 import { predictionStops, predictionPosition, predictionValue, adjustPrediction } from './prediction-scale.mjs';
 import { winTier, winTiming, displayedPayout, fountainParticle } from './win-timing.mjs?v=2';
 import { createRecentResults } from './recent-results.js';
+import { createReplaySnapshot, seededUnit } from './replay.mjs';
 
 const $ = (s) => document.querySelector(s);
 const money = (n) => (n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,7 +35,7 @@ function dismissLoader(){
  const fallback=setTimeout(release,4000);
  Promise.all([logoReady,fontsReady]).then(()=>{clearTimeout(fallback);release();});
 }
-const state = { balance: 1245000, phase: 'idle', multiplier: 1, bet: 0, auto: false, autoRound: 0, autoTotal: 0, remaining: 0, history: [], sound: true, music: true, musicVolume: .35, motion: true, turbo: false };
+const state = { balance: 1245000, phase: 'idle', multiplier: 1, bet: 0, auto: false, autoRound: 0, autoTotal: 0, remaining: 0, history: [], nextRoundId: 1, replay: null, replayRestore: null, visualSeed: 0, bonusTransitions: [], sound: true, music: true, musicVolume: .35, motion: true, turbo: false };
 const steppers = document.querySelectorAll('.stepper');
 steppers[0].innerHTML = '<button aria-label="Halve bet" title="Halve bet"><img src="./assets/arcade/minus.svg" alt=""></button><input id="bet" class="value" type="number" aria-label="Bet amount" min="1" step="1" value="100.00"><button aria-label="Double bet" title="Double bet"><img src="./assets/arcade/plus.svg" alt=""></button>';
 steppers[1].classList.add('prediction-control');
@@ -71,6 +72,10 @@ auto.innerHTML='<img src="./assets/arcade/autoplay.svg" alt="">';
 const message = document.createElement('div');
 message.className = 'round-message';
 message.setAttribute('role', 'status');
+const replayStatus=document.createElement('div');
+replayStatus.className='replay-status';replayStatus.hidden=true;
+replayStatus.innerHTML='<strong></strong><span>Historical replay · no wager</span>';
+$('.stage').append(replayStatus);
 const recentResults=createRecentResults($('.stage'));
 const gameInfoDialog=$('#gameInfoDialog');
 const infoPanels={
@@ -79,23 +84,30 @@ const infoPanels={
  history:$('#historyPanel'),
 };
 let activeInfoPanel='how-to',gameInfoOrigin=null;
-function resultValues(){return state.history.slice(0,5).map(round=>multiplierUnits(round.at)/100);}
+function resultValues(){return state.history.slice(0,5).map(round=>round.resultUnits/100);}
 function renderDialogHistory(){
  const rows=$('#dialogHistoryRows'),empty=$('#dialogHistoryEmpty');
- rows.innerHTML=state.history.map((round,index)=>{
-  const result=multiplierUnits(round.at)/100;
+ rows.innerHTML=state.history.map((round)=>{
+  const result=round.resultUnits/100;
   return `<tr>
-   <td>#${state.history.length-index}</td>
-   <td>${round.target.toFixed(2)}x</td>
+   <td>#${round.roundId}</td>
+   <td>${(round.targetUnits/100).toFixed(2)}x</td>
    <td class="result-${result>=10?'legendary':round.won?'win':'loss'}">${result.toFixed(2)}x</td>
-   <td>${money(round.bet)}</td>
-   <td>${money(round.payout)}</td>
+   <td>${money(round.betCents)}</td>
+   <td>${money(round.payoutCents)}</td>
    <td><span class="history-status ${round.won?'is-win':'is-loss'}">${round.won?'Win':'Loss'}</span></td>
+   <td><button class="history-replay" data-replay-round="${round.roundId}" aria-label="Replay round ${round.roundId}" title="Replay round ${round.roundId}" ${state.phase==='running'||state.auto||state.replay?'disabled':''}><img src="./assets/arcade/play.svg" alt=""></button></td>
   </tr>`;
  }).join('');
  empty.hidden=state.history.length>0;
  $('.history-table').hidden=!state.history.length;
 }
+$('#dialogHistoryRows').addEventListener('click',event=>{
+ const button=event.target.closest('[data-replay-round]');
+ if(!button)return;
+ const round=state.history.find(item=>item.roundId===Number(button.dataset.replayRound));
+ if(round)startReplay(round);
+});
 function renderRoundHistory(){
  renderDialogHistory();
  recentResults.render(resultValues());
@@ -340,21 +352,24 @@ function update() {
  $('.prediction-track').dataset.phase=state.phase;
  predictionPanel.dataset.reached=Boolean(state.predictionReached);
  $('#live-multiplier').textContent=state.phase==='running'?'Live '+(multiplierUnits(state.multiplier)/100).toFixed(2)+'x':'';
- action.querySelector('.action-label').textContent=state.phase==='running'?'Revealing result':state.auto?`Autoplay ${state.autoRound}/${state.autoTotal}`:'Start Stack';
- action.disabled=state.phase==='running'||state.auto;
+ action.querySelector('.action-label').textContent=state.replay?(state.phase==='running'?'Stop Replay':'Exit Replay'):state.phase==='running'?'Revealing result':state.auto?`Autoplay ${state.autoRound}/${state.autoTotal}`:'Start Stack';
+ action.querySelector('img').src=state.replay?'./assets/arcade/stop.svg':'./assets/arcade/play.svg';
+ action.disabled=!state.replay&&(state.phase==='running'||state.auto);
  const autoplayLabel=state.auto ? `Stop autoplay · round ${state.autoRound} of ${state.autoTotal}` : 'Open autoplay settings';
  auto.setAttribute('aria-label',autoplayLabel);auto.title=autoplayLabel;
- auto.disabled=state.phase==='running'&&!state.auto;
+ auto.disabled=Boolean(state.replay)||(state.phase==='running'&&!state.auto);
  auto.setAttribute('aria-checked',state.auto);
  auto.querySelector('img').src=state.auto?'./assets/arcade/stop.svg':'./assets/arcade/autoplay.svg';
  $('#autoplayProgress').hidden=!state.auto;
  $('#autoplayProgress').textContent=state.auto?`${state.autoRound}/${state.autoTotal}`:'';
- $('#startAutoplay').disabled=state.phase==='running'||state.auto;
- $('#replayIntro').disabled=state.phase==='running'||state.auto;
+ $('#startAutoplay').disabled=state.phase==='running'||state.auto||Boolean(state.replay);
+ $('#replayIntro').disabled=state.phase==='running'||state.auto||Boolean(state.replay);
  const turbo=$('#turbo'),turboLabel=`Turbo mode ${state.turbo?'on':'off'}: faster round reveals`;
  turbo.setAttribute('aria-checked',state.turbo);turbo.setAttribute('aria-label',turboLabel);turbo.title=turboLabel;
- turbo.disabled=state.phase==='running'||state.auto;
- for(const input of document.querySelectorAll('.stepper input, .stepper button, .drawer-row input:not(#musicVolume), #reset')) input.disabled=state.phase==='running' || state.auto;
+ turbo.disabled=state.phase==='running'||state.auto||Boolean(state.replay);
+ for(const input of document.querySelectorAll('.stepper input, .stepper button, .drawer-row input:not(#musicVolume), #reset')) input.disabled=state.phase==='running' || state.auto || Boolean(state.replay);
+ replayStatus.hidden=!state.replay;
+ if(state.replay)replayStatus.querySelector('strong').textContent=`Replay · Round #${state.replay.roundId}`;
 }
 steppers[0].querySelectorAll('button').forEach((button, index)=>button.onclick=()=>{
  const input=$('#bet'), value=Number(input.value)||Number(input.min);
@@ -405,7 +420,7 @@ $('#barSettings').addEventListener('click',()=>{
  $('#settingsDrawer').classList.remove('autoplay-open');
  $('#settingsDrawer h2').textContent='Settings';
 });
-$('#reset').onclick=()=>{ state.balance=1245000; state.history=[]; state.payout=0; renderRoundHistory(); update(); };
+$('#reset').onclick=()=>{ state.balance=1245000; state.history=[]; state.nextRoundId=1; state.payout=0; renderRoundHistory(); update(); };
 document.addEventListener('keydown',e=>{ if(document.body.classList.contains('intro-active')||gameInfoDialog.open)return; if(e.key==='Escape')$('#settingsDrawer').classList.remove('open'); if(e.code==='Space' && !['INPUT','BUTTON','SUMMARY'].includes(e.target.tagName) && !$('#settingsDrawer').classList.contains('open')){ e.preventDefault(); action.click(); } });
 
 const mount=$('#stack-scene');
@@ -623,7 +638,7 @@ function rebuild(count){
   b.visible=i<count;b.userData.resting=false;b.userData.crack.material.opacity=0;
   b.userData.landingAge=fresh?-.06*Math.max(0,i-previousCount):1;
   if(fresh)b.position.set(b.userData.x,b.userData.y+(state.motion&&!reducedMotion.matches?1.8:0),0);
-  b.rotation.set(0,0,0);b.scale.setScalar(1);b.userData.velocity.set((random()-.5)*5,2+random()*4,(random()-.5)*4);
+  b.rotation.set(0,0,0);b.scale.setScalar(1);b.userData.velocity.set((seededUnit(state.visualSeed,i,0)-.5)*5,2+seededUnit(state.visualSeed,i,1)*4,(seededUnit(state.visualSeed,i,2)-.5)*4);
  });
 }
 const INTRO_STORAGE_KEY='stacks:intro-seen:v1';
@@ -696,7 +711,7 @@ document.addEventListener('keydown',event=>{
  }
 });
 function start(){
- if(state.phase==='running')return;
+ if(state.phase==='running'||state.replay)return;
  $('#settingsDrawer').classList.remove('open','autoplay-open');
  if(gameInfoDialog.open)gameInfoDialog.close();
  clearTimeout(nextRound);
@@ -709,15 +724,42 @@ function start(){
   state.remaining=rounds;state.autoTotal=rounds;state.autoStart=state.balance;state.profit=profit*100;state.loss=loss*100;
  }
  if(state.auto)state.autoRound=state.autoTotal-state.remaining+1;
- state.bet=bet;state.target=target;state.balance-=bet;state.payout=0;state.multiplier=1;
+ state.bet=bet;state.target=target;state.balance-=bet;state.payout=0;state.multiplier=1;state.roundId=state.nextRoundId++;
  clearCelebration();stopWinSound();
  // Local demo outcome. Production must obtain the outcome and payout from Stake.
  state.breakAt=crashPoint(crypto.getRandomValues(new Uint32Array(1))[0]);
+ state.visualSeed=crypto.getRandomValues(new Uint32Array(1))[0];state.bonusTransitions=[];
  state.started=performance.now();state.speed=state.turbo? .36:.14;state.phase='running';state.bonus=0;
  clearPredictionCue();state.predictionReached=false;
  stopGrowthSound();lastGrowthAt=state.started;lastGrowthUnits=100;
  playMusic();
  message.remove();rebuild(1);message.classList.remove('broken');tone(300);tick(state.started);update();
+}
+function startReplay(round){
+ if(state.phase==='running'||state.auto||state.replay)return;
+ const replay=createReplaySnapshot(round);
+ state.replayRestore={bet:$('#bet').value,prediction:$('#prediction').value,turbo:state.turbo};
+ state.replay=replay;
+ $('#settingsDrawer').classList.remove('open','autoplay-open');
+ if(gameInfoDialog.open)gameInfoDialog.close();
+ clearTimeout(nextRound);clearCelebration();stopWinSound();resetDebris();
+ $('#bet').value=(replay.betCents/100).toFixed(2);
+ $('#prediction').value=(replay.targetUnits/100).toFixed(2);syncPredictionSlider();
+ state.bet=replay.betCents;state.target=replay.targetUnits/100;state.breakAt=replay.resultUnits/100;
+ state.payout=0;state.multiplier=1;state.turbo=replay.turbo;state.visualSeed=replay.visualSeed;state.bonusTransitions=[];
+ state.started=performance.now();state.speed=state.turbo ? .36 : .14;state.phase='running';state.bonus=0;
+ clearPredictionCue();state.predictionReached=false;
+ stopGrowthSound();lastGrowthAt=state.started;lastGrowthUnits=100;
+ playMusic();message.remove();message.classList.remove('broken','replay-loss');rebuild(1);tone(300);tick(state.started);renderDialogHistory();update();
+}
+function finishReplay(){
+ if(!state.replay)return;
+ stopMusic();stopGrowthSound();stopWinSound();clearPredictionCue();clearCelebration();resetDebris();
+ const restore=state.replayRestore;
+ state.replay=null;state.replayRestore=null;state.phase='idle';state.multiplier=1;state.bonus=0;state.payout=0;state.predictionReached=false;state.breakDelay=0;
+ message.remove();message.classList.remove('broken','win-message','replay-loss','long-payout');
+ if(restore){$('#bet').value=restore.bet;$('#prediction').value=restore.prediction;state.turbo=restore.turbo;syncPredictionSlider();}
+ rebuild(10);renderDialogHistory();update();action.focus();
 }
 function settle(won, at){
  if(state.phase!=='running')return;
@@ -725,22 +767,25 @@ function settle(won, at){
  stopGrowthSound();
  clearPredictionCue();state.predictionReached=won;
  const effectiveUnits=multiplierUnits(state.target);
- state.phase=won?'won':'broken';state.multiplier=at;state.bonus=bonusStage(at).level;state.payout=won?payout(state.bet,effectiveUnits):0;state.balance+=state.payout;state.ended=performance.now();
+ state.phase=won?'won':'broken';state.multiplier=at;state.bonus=bonusStage(at).level;state.payout=state.replay?state.replay.payoutCents:won?payout(state.bet,effectiveUnits):0;if(!state.replay)state.balance+=state.payout;state.ended=performance.now();
  if(won){state.winRotationFrom=turntable.rotation.y;state.winRotationTo=Math.round(turntable.rotation.y/Math.PI)*Math.PI;}
  if(!won){state.breakDelay=0;if(!state.motion||reducedMotion.matches)startDebris();}
  message.classList.toggle('broken',!won);
  message.textContent='';
  if(won){
-  const tier=winTier(state.target),title='YOU WON';
+  const tier=winTier(state.target),title=state.replay?'REPLAY · YOU WON':'YOU WON';
   message.classList.toggle('long-payout',money(state.payout).length>12);
-  message.innerHTML=`<span class="win-title" aria-hidden="true">${title}</span><strong class="win-amount" aria-hidden="true">${money(state.payout)}</strong><span class="win-announcement">${tier.label}. ${title}. Payout ${money(state.payout)}.</span>`;
+  message.innerHTML=`<span class="win-title" aria-hidden="true">${title}</span><strong class="win-amount" aria-hidden="true">${money(state.payout)}</strong>${state.replay?`<span class="replay-detail" aria-hidden="true">Target ${(state.replay.targetUnits/100).toFixed(2)}x · Result ${(state.replay.resultUnits/100).toFixed(2)}x</span>`:''}<span class="win-announcement">${tier.label}. ${title}. Payout ${money(state.payout)}.</span>`;
   $('.stage').append(message);
   celebrateWin();playWinSound(state.target);
  }
- if(!won)tone(120,.3);
- state.history.unshift({at,target:state.target,bet:state.bet,payout:state.payout,won});state.history=state.history.slice(0,30);
- renderRoundHistory();
- if(state.auto){state.remaining--;const delta=state.balance-state.autoStart;if(state.remaining<=0||delta>=state.profit||delta<=-state.loss||state.balance<state.bet){state.auto=false;state.autoRound=0;state.autoTotal=0;}else nextRound=setTimeout(start,won?winTiming(state.target).duration+400:1800);}
+ if(!won){tone(120,.3);if(state.replay){message.classList.add('replay-loss');message.innerHTML=`<strong>STACK BROKE</strong><span class="replay-detail">Round #${state.replay.roundId} · Result ${(state.replay.resultUnits/100).toFixed(2)}x before target ${(state.replay.targetUnits/100).toFixed(2)}x</span>`;$('.stage').append(message);}}
+ if(!state.replay){
+  const snapshot=createReplaySnapshot({roundId:state.roundId,betCents:state.bet,targetUnits:effectiveUnits,resultUnits:multiplierUnits(at),payoutCents:state.payout,won,visualSeed:state.visualSeed,turbo:state.turbo,bonusTransitions:state.bonusTransitions});
+  state.history.unshift(snapshot);state.history=state.history.slice(0,30);renderRoundHistory();
+ }
+ if(state.auto&&!state.replay){state.remaining--;const delta=state.balance-state.autoStart;if(state.remaining<=0||delta>=state.profit||delta<=-state.loss||state.balance<state.bet){state.auto=false;state.autoRound=0;state.autoTotal=0;}else nextRound=setTimeout(start,won?winTiming(state.target).duration+400:1800);}
+ if(state.replay)renderDialogHistory();
  update();
 }
 function tick(now){
@@ -755,7 +800,7 @@ function tick(now){
  }
  // Passing the prediction does not end the reveal or credit the balance.
  const result=resolveRound(next,state.breakAt,state.target);
- if(result){settle(result.won,result.at);return;}
+ if(result){settle(state.replay?state.replay.won:result.won,state.replay?state.replay.resultUnits/100:result.at);return;}
  state.multiplier=next;
  if(next>=state.target)predictionReached(now);
  growthSound(next,now);
@@ -763,10 +808,10 @@ function tick(now){
  const count=Math.min(28,1+Math.floor(Math.log(next)*6)*(stage.level>=2?2:1)+(stage.level>=1?3:0));
  if(count>visibleCount){rebuild(count);tone(300+count*24);}
  const bonus=stage.level;
- if(bonus!==state.bonus){state.bonus=bonus;effects.pulse([0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][bonus],true);tone(880,.2);}
+ if(bonus!==state.bonus){state.bonus=bonus;if(bonus>0)state.bonusTransitions.push({level:bonus,atUnits:multiplierUnits(next)});effects.pulse([0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][bonus],true);tone(880,.2);}
  update();
 }
-action.onclick=start;
+action.onclick=()=>state.replay?finishReplay():start();
 let last=performance.now();
 function animate(now){
  const dt=Math.min((now-last)/1000,.05);last=now;tick(now);

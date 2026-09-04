@@ -1,3 +1,20 @@
+# Deterministic Round Replay QA
+
+final result: passed
+
+- Round History adds one compact play-icon action per recorded round without changing the approved dialog structure. The action has a descriptive accessible label and remains disabled while a round, autoplay, or another replay is active.
+- Each immutable replay snapshot carries a version, round ID, bet cents, target and result units, exact payout cents, win state, visual seed, turbo timing, and crossed bonus stages.
+- Replay closes the dialog, loads the archived bet and target into the real controls, uses the original turbo timing and deterministic block-break velocities, and shows `Replay · Round #N` plus `Historical replay · no wager` in the arena.
+- The main action becomes `Stop Replay` during playback and `Exit Replay` after settlement, preventing long high-multiplier replays from trapping the user. Early cancellation was exercised and restored all controls without side effects.
+- Browser verification replayed Round #1 with a 123.00 bet, 1.50x target, 80.30x result, 184.50 payout, and turbo enabled. Balance remained 12,511.50 and history remained one row throughout.
+- Exiting restored the user's newer 50.00 bet, 3.00x target, and turbo-off choice, returned the scene to 1.00x idle, and kept the original recent result.
+- The replayed win uses the same tower, camera move, multiplier-tier celebration, and sound system as the live round. Loss replay uses the same physics break and adds a clear historical Stack Broke result.
+- Final screenshots confirmed the replay status, centered win hierarchy, fully visible tower and platform, and a clean history row at the existing desktop viewport. No P0, P1, or P2 visual issues remain.
+- Browser diagnostics contained no errors. The only logs were the existing Three.js blur-kernel and shadow-map deprecation warnings.
+- Main-module syntax, whitespace checks, and thirteen focused math, ruler, history, win-timing, replay-snapshot, and deterministic-seed tests pass.
+
+---
+
 # Game Guide And History Dialog QA
 
 final result: passed

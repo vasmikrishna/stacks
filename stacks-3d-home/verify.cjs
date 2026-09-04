@@ -33,7 +33,7 @@ const assert = require('node:assert/strict');
    window.testFullBreak=()=>{rebuild(28);state.phase='broken';startDebris();};
    window.testWin=(target)=>{state.target=target;state.phase='running';settle(true,100);};
    window.celebrationCount=()=>celebration.visible?confetti.filter(p=>p.visible).length:0;
-   window.testHistory=()=>{state.history=[2.96,1.08,12.60,3.84,.73].map((at,index)=>({at,target:2.5,bet:10000,payout:index===4?0:25000,won:index!==4}));renderRoundHistory();};
+   window.testHistory=()=>{state.history=[2.96,1.08,12.60,3.84,.73].map((at,index)=>createReplaySnapshot({roundId:5-index,betCents:10000,targetUnits:250,resultUnits:multiplierUnits(at),payoutCents:at>=2.5?25000:0,won:at>=2.5,visualSeed:1000+index,turbo:false,bonusTransitions:[]}));renderRoundHistory();};
   `});
  });
  await page.addInitScript(()=>{localStorage.setItem('stacks:intro-seen:v1','1');crypto.getRandomValues=(a)=>{a.fill(Math.floor(.00965*4294967296)-1);return a;};});

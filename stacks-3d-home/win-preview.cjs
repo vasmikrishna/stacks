@@ -20,7 +20,7 @@ const hook=`
  previewTools.querySelectorAll('button').forEach((button,i)=>button.onclick=()=>previewWin([1.2,1.5,3,7,25][i]));
  previewTools.querySelector('input').oninput=e=>{previewTime=state.ended+Number(e.target.value);};
  action.addEventListener('click',()=>{previewTime=null;},{capture:true});
- state.history=[2.96,1.08,12.60,3.84,.73].map(at=>({at,target:2.5,bet:10000,payout:at>=2.5?25000:0,won:at>=2.5}));
+ state.history=[2.96,1.08,12.60,3.84,.73].map((at,index)=>createReplaySnapshot({roundId:5-index,betCents:10000,targetUnits:250,resultUnits:multiplierUnits(at),payoutCents:at>=2.5?25000:0,won:at>=2.5,visualSeed:1000+index,turbo:false,bonusTransitions:[]}));
  renderRoundHistory();
 `;
 const types={'.html':'text/html','.css':'text/css','.js':'text/javascript','.mjs':'text/javascript','.svg':'image/svg+xml','.png':'image/png','.ttf':'font/ttf','.wasm':'application/wasm'};
