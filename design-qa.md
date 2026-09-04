@@ -2,7 +2,7 @@
 
 final result: passed
 
-- Money growth feedback now accelerates continuously with the live multiplier: approximately 250 ms between cues near 1x, compressing to 55 ms by 100x. Pitch rises by twenty semitones and every fourth tick adds a short metallic accent.
+- Money growth feedback now begins as a rapid rolling counter at approximately 78 ms between cues near 1x and compresses to 26 ms by 100x. Pitch rises by twenty semitones and every fourth tick adds a short metallic accent.
 - The target-reached cue no longer creates a half-second dead spot in the money rhythm. Growth audio resumes on the next cadence interval.
 - Block sounds are synchronized to the visible landing point rather than block creation. Every new block receives a low body impact plus a short crystal overtone, with small per-block variation and brighter tuning at higher bonus stages.
 - The previous sparse six-second chord loop is replaced with an adaptive score: sustained harmony, moving arpeggio, bass pulse, and kick begin with the round; tempo rises from 94 BPM through 142 BPM across the five game stages; Double, Super, and Legendary stages add a sparkle layer and higher arpeggio energy.

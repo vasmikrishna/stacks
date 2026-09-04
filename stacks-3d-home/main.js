@@ -222,7 +222,7 @@ function growthSound(multiplier,now){
  lastGrowthAt=now;lastGrowthUnits=units;
  growthTick++;
  // Tight metallic partials read as a coin counter while the cadence accelerates.
- const partials=cue.accent?[[1,cue.volume*1.15,.07],[2.02,cue.volume*.45,.052],[3.12,cue.volume*.17,.038]]:[[1,cue.volume,.062],[2.38,cue.volume*.22,.038]];
+ const partials=cue.accent?[[1,cue.volume*1.15,.042],[2.02,cue.volume*.42,.03],[3.12,cue.volume*.15,.022]]:[[1,cue.volume,.034],[2.38,cue.volume*.2,.022]];
  for(const [ratio,volume,duration] of partials){
   const oscillator=audio.createOscillator(),gain=audio.createGain(),time=audio.currentTime;
   oscillator.type=ratio===1?'triangle':'sine';oscillator.frequency.setValueAtTime(cue.frequency*ratio,time);

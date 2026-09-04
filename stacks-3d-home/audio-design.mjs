@@ -18,9 +18,9 @@ export function growthCue(multiplier, tick = 0) {
   const energy = Math.min(1, Math.log2(value) / Math.log2(100));
   const semitone = Math.floor(energy * 20);
   return {
-    intervalMs: Math.round(250 - energy * 195),
+    intervalMs: Math.round(78 - energy * 52),
     frequency: 560 * 2 ** (semitone / 12),
-    volume: .018 + energy * .012,
+    volume: .021 + energy * .011,
     accent: tick % 4 === 3,
   };
 }
