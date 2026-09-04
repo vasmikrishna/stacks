@@ -16,11 +16,13 @@ export function audioStage(multiplier) {
 export function growthCue(multiplier, tick = 0) {
   const value = validMultiplier(multiplier);
   const energy = Math.min(1, Math.log2(value) / Math.log2(100));
-  const semitone = Math.floor(energy * 8);
+  const stage = audioStage(value);
   return {
-    intervalMs: Math.round(78 - energy * 52),
-    frequency: 1320 * 2 ** (semitone / 12),
-    volume: .014 + energy * .007,
+    intervalMs: Math.round(128 - energy * 72),
+    coinCount: 2 + (stage >= 2 ? 1 : 0) + (stage >= 4 ? 1 : 0),
+    spreadMs: 18,
+    playbackRate: .94 + energy * .2,
+    volume: .038 + energy * .012,
     pitchOffset: [1, 1.06, .96][tick % 3],
     accent: tick % 4 === 3,
   };

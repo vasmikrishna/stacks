@@ -5,10 +5,11 @@ import { audioStage, growthCue, landingCue, musicEvent } from './audio-design.mj
 test('money cadence accelerates sharply as the multiplier grows', () => {
   const cues = [1, 2, 7, 25, 100].map((value) => growthCue(value));
   assert.ok(cues.every((cue, index) => index === 0 || cue.intervalMs < cues[index - 1].intervalMs));
-  assert.ok(cues[0].intervalMs <= 80);
-  assert.ok(cues.at(-1).intervalMs <= 30);
-  assert.ok(cues[0].frequency >= 1200);
-  assert.ok(cues.at(-1).frequency > cues[0].frequency * 1.4);
+  assert.ok(cues[0].intervalMs >= 120 && cues[0].intervalMs <= 135);
+  assert.ok(cues.at(-1).intervalMs >= 50 && cues.at(-1).intervalMs <= 60);
+  assert.equal(cues[0].coinCount, 2);
+  assert.equal(cues.at(-1).coinCount, 4);
+  assert.ok(cues.at(-1).playbackRate > cues[0].playbackRate);
   assert.deepEqual([0, 1, 2].map((tick) => growthCue(2, tick).pitchOffset), [1, 1.06, .96]);
   assert.equal(growthCue(3, 3).accent, true);
 });

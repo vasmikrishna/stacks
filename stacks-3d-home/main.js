@@ -179,7 +179,7 @@ gameInfoDialog.addEventListener('close',()=>gameInfoOrigin?.focus());
 let audio;
 let lastGrowthAt=0,lastGrowthUnits=100,growthTick=0;
 const growthVoices=new Set();
-let moneyNoiseBuffer;
+let moneyCoinBuffer;
 let predictionAnimations=[];
 function clearPredictionCue(){
  predictionAnimations.forEach(animation=>animation.cancel());predictionAnimations=[];
@@ -215,19 +215,29 @@ function stopGrowthSound(){
  for(const voice of growthVoices){try{voice.stop();}catch{}voice.disconnect();}
  growthVoices.clear();
 }
-function moneyAccentClick(time,volume){
- if(!moneyNoiseBuffer){
-  const length=Math.ceil(audio.sampleRate*.018);
-  moneyNoiseBuffer=audio.createBuffer(1,length,audio.sampleRate);
-  const channel=moneyNoiseBuffer.getChannelData(0);
-  for(let index=0;index<length;index++)channel[index]=(Math.random()*2-1)*(1-index/length);
+function coinBuffer(){
+ if(moneyCoinBuffer)return moneyCoinBuffer;
+ const duration=.11,length=Math.ceil(audio.sampleRate*duration);
+ moneyCoinBuffer=audio.createBuffer(1,length,audio.sampleRate);
+ const channel=moneyCoinBuffer.getChannelData(0);
+ for(let index=0;index<length;index++){
+  const time=index/audio.sampleRate,attack=Math.min(1,time/.0015),ring=Math.exp(-time*34),strike=Math.exp(-time*125);
+  const metal=Math.sin(Math.PI*2*1780*time)*.54+Math.sin(Math.PI*2*2637*time)*.31+Math.sin(Math.PI*2*4210*time)*.12;
+  channel[index]=attack*(metal*ring+(Math.random()*2-1)*strike*.09);
  }
+ return moneyCoinBuffer;
+}
+function fallingCoin(time,playbackRate,pan,volume){
  const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();
- source.buffer=moneyNoiseBuffer;filter.type='bandpass';filter.frequency.value=4600;filter.Q.value=1.4;
- gain.gain.setValueAtTime(volume,time);gain.gain.exponentialRampToValueAtTime(.0001,time+.014);
- source.connect(filter);filter.connect(gain);gain.connect(audio.destination);growthVoices.add(source);
- source.onended=()=>{growthVoices.delete(source);source.disconnect();filter.disconnect();gain.disconnect();};
- source.start(time);source.stop(time+.018);
+ const panner=audio.createStereoPanner?.();
+ source.buffer=coinBuffer();source.playbackRate.setValueAtTime(playbackRate,time);
+ filter.type='highpass';filter.frequency.value=1050;filter.Q.value=.7;
+ gain.gain.setValueAtTime(volume,time);gain.gain.exponentialRampToValueAtTime(.0001,time+.095);
+ source.connect(filter);
+ if(panner){filter.connect(panner);panner.pan.value=pan;panner.connect(gain);}else filter.connect(gain);
+ gain.connect(audio.destination);growthVoices.add(source);
+ source.onended=()=>{growthVoices.delete(source);source.disconnect();filter.disconnect();panner?.disconnect();gain.disconnect();};
+ source.start(time);source.stop(time+.12);
 }
 function growthSound(multiplier,now){
  if(state.phase!=='running'||!state.sound||document.hidden||!audio||audio.state!=='running')return;
@@ -236,19 +246,13 @@ function growthSound(multiplier,now){
  if(units<=lastGrowthUnits||now-lastGrowthAt<cue.intervalMs)return;
  lastGrowthAt=now;lastGrowthUnits=units;
  growthTick++;
- // Inharmonic high partials produce a short coin clink without a low arcade-beep fundamental.
- const partials=cue.accent?[[1,cue.volume*1.12,.028],[1.47,cue.volume*.58,.022],[2.63,cue.volume*.2,.014]]:[[1,cue.volume,.024],[1.61,cue.volume*.34,.016]];
-  for(const [ratio,volume,duration] of partials){
-   const oscillator=audio.createOscillator(),gain=audio.createGain(),time=audio.currentTime;
-  oscillator.type='sine';oscillator.frequency.setValueAtTime(cue.frequency*cue.pitchOffset*ratio,time);
-  oscillator.frequency.exponentialRampToValueAtTime(cue.frequency*cue.pitchOffset*ratio*.985,time+duration);
-  gain.gain.setValueAtTime(0,time);gain.gain.linearRampToValueAtTime(volume,time+.0015);
-  gain.gain.exponentialRampToValueAtTime(.0001,time+duration);
-  oscillator.connect(gain);gain.connect(audio.destination);growthVoices.add(oscillator);
-  oscillator.onended=()=>{growthVoices.delete(oscillator);oscillator.disconnect();gain.disconnect();};
-  oscillator.start(time);oscillator.stop(time+duration+.005);
+ // Each cadence emits a short stereo shower, so several separate coins strike in sequence.
+ const rates=[1,.91,1.08,.97],start=audio.currentTime;
+ for(let index=0;index<cue.coinCount;index++){
+  const pan=cue.coinCount===1?0:-.48+index/(cue.coinCount-1)*.96;
+  const rate=cue.playbackRate*cue.pitchOffset*rates[(growthTick+index)%rates.length];
+  fallingCoin(start+index*cue.spreadMs/1000,rate,pan,cue.volume*(cue.accent&&index===0?1.12:.82+index*.05));
  }
- if(cue.accent)moneyAccentClick(audio.currentTime,cue.volume*.38);
 }
 let musicTimer, musicBus, musicStarted=false, musicStep=0, nextMusicNote=0;
 const musicVoices=new Set();

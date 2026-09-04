@@ -2,7 +2,7 @@
 
 final result: passed
 
-- Money growth feedback now begins as a rapid rolling counter at approximately 78 ms between cues near 1x and compresses to 26 ms by 100x. Its clean coin timbre uses alternating pitches above 1.3 kHz, short inharmonic sine overtones, and a filtered metallic click every fourth tick; the low triangle-wave arcade tone has been removed.
+- Money growth feedback is now a falling-coin cascade rather than a single electronic tick. Main bursts are spaced approximately 128 ms apart near 1x and compress to 56 ms by 100x; each burst releases two to four separately sampled metallic impacts, staggered by 18 ms, pitch-varied, and panned across the stereo field.
 - The target-reached cue no longer creates a half-second dead spot in the money rhythm. Growth audio resumes on the next cadence interval.
 - Block sounds are synchronized to the visible landing point rather than block creation. Every new block receives a low body impact plus a short crystal overtone, with small per-block variation and brighter tuning at higher bonus stages.
 - The previous sparse six-second chord loop is replaced with an adaptive score: sustained harmony, moving arpeggio, bass pulse, and kick begin with the round; tempo rises from 94 BPM through 142 BPM across the five game stages; Double, Super, and Legendary stages add a sparkle layer and higher arpeggio energy.
