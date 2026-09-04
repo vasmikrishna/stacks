@@ -7,6 +7,7 @@ import { predictionStops, predictionPosition, predictionValue, adjustPrediction 
 import { winTier, winTiming, displayedPayout, fountainParticle } from './win-timing.mjs?v=2';
 import { createRecentResults } from './recent-results.js';
 import { createReplaySnapshot, seededUnit } from './replay.mjs';
+import { growthCue, landingCue, musicEvent } from './audio-design.mjs';
 
 const $ = (s) => document.querySelector(s);
 const money = (n) => (n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -176,7 +177,7 @@ gameInfoDialog.addEventListener('click',event=>{if(event.target===gameInfoDialog
 gameInfoDialog.addEventListener('close',()=>gameInfoOrigin?.focus());
 
 let audio;
-let lastGrowthAt=0,lastGrowthUnits=100;
+let lastGrowthAt=0,lastGrowthUnits=100,growthTick=0;
 const growthVoices=new Set();
 let predictionAnimations=[];
 function clearPredictionCue(){
@@ -198,7 +199,7 @@ function predictionReached(now){
   ],{duration:600,easing:'ease-out'}));
  }
  if(!state.sound||!audio||audio.state!=='running')return;
- stopGrowthSound();lastGrowthAt=now+400;
+ stopGrowthSound();lastGrowthAt=now;
  for(const [index,frequency] of [659.25,880].entries()){
   const oscillator=audio.createOscillator(),gain=audio.createGain(),time=audio.currentTime+index*.12;
   oscillator.frequency.value=frequency;
@@ -216,15 +217,16 @@ function stopGrowthSound(){
 function growthSound(multiplier,now){
  if(state.phase!=='running'||!state.sound||document.hidden||!audio||audio.state!=='running')return;
  const units=multiplierUnits(multiplier);
- const progress=Math.min(1,Math.log2(Math.max(1,multiplier))/8);
- if(units<=lastGrowthUnits||now-lastGrowthAt<450-progress*280)return;
+ const cue=growthCue(multiplier,growthTick);
+ if(units<=lastGrowthUnits||now-lastGrowthAt<cue.intervalMs)return;
  lastGrowthAt=now;lastGrowthUnits=units;
- // Two short bell partials make a restrained coin-counting tick, not another melody.
- const frequency=520*2**(Math.floor(progress*12)/12);
- for(const [ratio,volume,duration] of [[1,.016,.105],[2.4,.0035,.065]]){
+ growthTick++;
+ // Tight metallic partials read as a coin counter while the cadence accelerates.
+ const partials=cue.accent?[[1,cue.volume*1.15,.07],[2.02,cue.volume*.45,.052],[3.12,cue.volume*.17,.038]]:[[1,cue.volume,.062],[2.38,cue.volume*.22,.038]];
+ for(const [ratio,volume,duration] of partials){
   const oscillator=audio.createOscillator(),gain=audio.createGain(),time=audio.currentTime;
-  oscillator.type='sine';oscillator.frequency.setValueAtTime(frequency*ratio,time);
-  oscillator.frequency.exponentialRampToValueAtTime(frequency*ratio*1.035,time+duration);
+  oscillator.type=ratio===1?'triangle':'sine';oscillator.frequency.setValueAtTime(cue.frequency*ratio,time);
+  oscillator.frequency.exponentialRampToValueAtTime(cue.frequency*ratio*1.045,time+duration);
   gain.gain.setValueAtTime(0,time);gain.gain.linearRampToValueAtTime(volume,time+.003);
   gain.gain.exponentialRampToValueAtTime(.0001,time+duration);
   oscillator.connect(gain);gain.connect(audio.destination);growthVoices.add(oscillator);
@@ -245,6 +247,14 @@ function musicNote(midi,when,duration,volume,type='sine',attack=.65){
  oscillator.onended=()=>{musicVoices.delete(oscillator);oscillator.disconnect();envelope.disconnect();};
  oscillator.start(when);oscillator.stop(when+duration+.03);
 }
+function musicKick(when,stage){
+ const oscillator=audio.createOscillator(),envelope=audio.createGain();
+ oscillator.type='sine';oscillator.frequency.setValueAtTime(94+stage*7,when);oscillator.frequency.exponentialRampToValueAtTime(42,when+.16);
+ envelope.gain.setValueAtTime(.0001,when);envelope.gain.exponentialRampToValueAtTime(.16+stage*.012,when+.008);envelope.gain.exponentialRampToValueAtTime(.0001,when+.19);
+ oscillator.connect(envelope);envelope.connect(musicBus);musicVoices.add(oscillator);
+ oscillator.onended=()=>{musicVoices.delete(oscillator);oscillator.disconnect();envelope.disconnect();};
+ oscillator.start(when);oscillator.stop(when+.21);
+}
 function stopMusic(){
  clearInterval(musicTimer);musicTimer=undefined;
  for(const voice of musicVoices){try{voice.stop();}catch{}}
@@ -257,24 +267,23 @@ function playMusic(){
  try {
   audio ||= new (window.AudioContext || window.webkitAudioContext)();
   audio.resume().catch(()=>{});
-  musicBus=audio.createGain();musicBus.gain.value=state.musicVolume*.1;musicBus.connect(audio.destination);
+  musicBus=audio.createGain();musicBus.gain.value=state.musicVolume*.18;musicBus.connect(audio.destination);
   musicStep=0;
   nextMusicNote=audio.currentTime+.05;
-  // Slow, soft chord swells with one sparse upper note per phrase.
-  const chords=[[50,57,60,64],[48,55,59,62],[45,52,55,59],[43,50,57,60]];
   const schedule=()=>{
    if(audio.state!=='running')return;
    nextMusicNote=Math.max(nextMusicNote,audio.currentTime+.02);
-   while(nextMusicNote<audio.currentTime+.18){
-    const chord=chords[Math.floor(musicStep/8)%chords.length];
-    if(musicStep%8===0){
-     for(const note of chord)musicNote(note,nextMusicNote,5.8,.075);
-    }
-    if(musicStep%8===4)musicNote(chord[3]+12,nextMusicNote,2.2,.045,'sine',.08);
-    musicStep=(musicStep+1)%32;nextMusicNote+=.75;
+   while(nextMusicNote<audio.currentTime+.22){
+    const event=musicEvent(musicStep,state.multiplier);
+    if(event.pad)for(const note of event.chord)musicNote(note,nextMusicNote,event.stepSeconds*7.5,.055+event.stage*.003,'sine',.18);
+    if(event.bass)musicNote(event.chord[0]-12,nextMusicNote,event.stepSeconds*1.7,.13,'triangle',.012);
+    musicNote(event.arpMidi,nextMusicNote,event.stepSeconds*.72,.07+event.stage*.006,event.stage>=2?'triangle':'sine',.008);
+    if(event.sparkle)musicNote(event.arpMidi+7,nextMusicNote+.02,event.stepSeconds*.42,.027,'sine',.006);
+    if(event.kick)musicKick(nextMusicNote,event.stage);
+    musicStep=(musicStep+1)%32;nextMusicNote+=event.stepSeconds;
    }
   };
-  schedule();musicTimer=setInterval(schedule,100);
+  schedule();musicTimer=setInterval(schedule,75);
  } catch {stopMusic();}
 }
 $('#music').onclick=()=>{
@@ -285,13 +294,14 @@ $('#music').onclick=()=>{
 };
 $('#musicVolume').oninput=()=>{
  state.musicVolume=Number($('#musicVolume').value)/100;
- if(musicBus)musicBus.gain.setTargetAtTime(state.musicVolume*.1,audio.currentTime,.05);
+ if(musicBus)musicBus.gain.setTargetAtTime(state.musicVolume*.18,audio.currentTime,.05);
 };
 document.addEventListener('visibilitychange',()=>{
- if(document.hidden){stopMusic();stopGrowthSound();stopWinSound();}else if(musicStarted&&state.music)playMusic();
+ if(document.hidden){stopMusic();stopGrowthSound();stopLandingSounds();stopWinSound();}else if(musicStarted&&state.music)playMusic();
 });
 window.addEventListener('pagehide',stopMusic);
 window.addEventListener('pagehide',stopGrowthSound);
+window.addEventListener('pagehide',stopLandingSounds);
 function tone(frequency = 420, duration = .1) {
  if (!state.sound) return;
  try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); const o=audio.createOscillator(), g=audio.createGain(); o.frequency.value=frequency; g.gain.setValueAtTime(.035,audio.currentTime); g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration); o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime+duration); } catch {}
@@ -302,6 +312,26 @@ function playSplashChime(){
  setTimeout(()=>tone(880,.22),140);
 }
 const winSoundVoices=new Set();
+const landingVoices=new Set();
+function stopLandingSounds(){
+ for(const voice of landingVoices){try{voice.stop();}catch{}voice.disconnect();}
+ landingVoices.clear();
+}
+function blockLandingSound(index,multiplier){
+ if(!state.sound||state.phase!=='running'||document.hidden||!audio||audio.state!=='running')return;
+ const cue=landingCue(index,multiplier),time=audio.currentTime;
+ for(const [type,start,finish,volume,duration] of [
+  ['triangle',cue.bodyFrequency,cue.bodyFrequency*.58,cue.volume,.13],
+  ['sine',cue.crystalFrequency,cue.crystalFrequency*1.08,cue.volume*.42,.085],
+ ]){
+  const oscillator=audio.createOscillator(),gain=audio.createGain();
+  oscillator.type=type;oscillator.frequency.setValueAtTime(start,time);oscillator.frequency.exponentialRampToValueAtTime(finish,time+duration);
+  gain.gain.setValueAtTime(.0001,time);gain.gain.exponentialRampToValueAtTime(volume,time+.004);gain.gain.exponentialRampToValueAtTime(.0001,time+duration);
+  oscillator.connect(gain);gain.connect(audio.destination);landingVoices.add(oscillator);
+  oscillator.onended=()=>{landingVoices.delete(oscillator);oscillator.disconnect();gain.disconnect();};
+  oscillator.start(time);oscillator.stop(time+duration+.01);
+ }
+}
 function stopWinSound(){
  for(const voice of winSoundVoices){try{voice.stop();}catch{}voice.disconnect();}
  winSoundVoices.clear();
@@ -335,7 +365,7 @@ function playWinSound(target){
  }catch{stopWinSound();}
 }
 window.addEventListener('pagehide',stopWinSound);
-for (const key of ['sound','motion']) $('#'+key).onclick = () => { state[key]=!state[key]; $('#'+key).setAttribute('aria-checked',state[key]); $('#'+key+' .switch').classList.toggle('off', !state[key]); if(key==='sound'&&!state.sound){stopGrowthSound();stopWinSound();} if(key==='motion'&&!state.motion)clearPredictionCue(); };
+for (const key of ['sound','motion']) $('#'+key).onclick = () => { state[key]=!state[key]; $('#'+key).setAttribute('aria-checked',state[key]); $('#'+key+' .switch').classList.toggle('off', !state[key]); if(key==='sound'&&!state.sound){stopGrowthSound();stopLandingSounds();stopWinSound();} if(key==='motion'&&!state.motion)clearPredictionCue(); };
 $('#turbo').onclick=()=>{
  if(state.phase==='running'||state.auto)return;
  state.turbo=!state.turbo;
@@ -731,7 +761,7 @@ function start(){
  state.visualSeed=crypto.getRandomValues(new Uint32Array(1))[0];state.bonusTransitions=[];
  state.started=performance.now();state.speed=state.turbo? .36:.14;state.phase='running';state.bonus=0;
  clearPredictionCue();state.predictionReached=false;
- stopGrowthSound();lastGrowthAt=state.started;lastGrowthUnits=100;
+ stopGrowthSound();stopLandingSounds();lastGrowthAt=state.started;lastGrowthUnits=100;growthTick=0;
  playMusic();
  message.remove();rebuild(1);message.classList.remove('broken');tone(300);tick(state.started);update();
 }
@@ -749,12 +779,12 @@ function startReplay(round){
  state.payout=0;state.multiplier=1;state.turbo=replay.turbo;state.visualSeed=replay.visualSeed;state.bonusTransitions=[];
  state.started=performance.now();state.speed=state.turbo ? .36 : .14;state.phase='running';state.bonus=0;
  clearPredictionCue();state.predictionReached=false;
- stopGrowthSound();lastGrowthAt=state.started;lastGrowthUnits=100;
+ stopGrowthSound();stopLandingSounds();lastGrowthAt=state.started;lastGrowthUnits=100;growthTick=0;
  playMusic();message.remove();message.classList.remove('broken','replay-loss');rebuild(1);tone(300);tick(state.started);renderDialogHistory();update();
 }
 function finishReplay(){
  if(!state.replay)return;
- stopMusic();stopGrowthSound();stopWinSound();clearPredictionCue();clearCelebration();resetDebris();
+ stopMusic();stopGrowthSound();stopLandingSounds();stopWinSound();clearPredictionCue();clearCelebration();resetDebris();
  const restore=state.replayRestore;
  state.replay=null;state.replayRestore=null;state.phase='idle';state.multiplier=1;state.bonus=0;state.payout=0;state.predictionReached=false;state.breakDelay=0;
  message.remove();message.classList.remove('broken','win-message','replay-loss','long-payout');
@@ -765,6 +795,7 @@ function settle(won, at){
  if(state.phase!=='running')return;
  stopMusic();
  stopGrowthSound();
+ stopLandingSounds();
  clearPredictionCue();state.predictionReached=won;
  const effectiveUnits=multiplierUnits(state.target);
  state.phase=won?'won':'broken';state.multiplier=at;state.bonus=bonusStage(at).level;state.payout=state.replay?state.replay.payoutCents:won?payout(state.bet,effectiveUnits):0;if(!state.replay)state.balance+=state.payout;state.ended=performance.now();
@@ -806,7 +837,7 @@ function tick(now){
  growthSound(next,now);
  const stage=bonusStage(next);
  const count=Math.min(28,1+Math.floor(Math.log(next)*6)*(stage.level>=2?2:1)+(stage.level>=1?3:0));
- if(count>visibleCount){rebuild(count);tone(300+count*24);}
+ if(count>visibleCount)rebuild(count);
  const bonus=stage.level;
  if(bonus!==state.bonus){state.bonus=bonus;if(bonus>0)state.bonusTransitions.push({level:bonus,atUnits:multiplierUnits(next)});effects.pulse([0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][bonus],true);tone(880,.2);}
  update();
@@ -854,7 +885,7 @@ function animate(now){
    let offset=t<.36?1.8*(1-(t/.36)**2):t<.66?Math.sin((t-.36)/.3*Math.PI)*.14:0;
    b.position.y=b.userData.y+(moving?offset:0);
    b.position.x=moving?THREE.MathUtils.lerp(b.position.x,b.userData.x,Math.min(1,dt*12)):b.userData.x;
-   if(b.visible&&moving&&oldAge<.36&&t>=.36)effects.pulse(b.material.color);
+   if(b.visible&&moving&&oldAge<.36&&t>=.36){effects.pulse(b.material.color);blockLandingSound(i,state.multiplier);}
    b.scale.setScalar(1);
   }
  });
