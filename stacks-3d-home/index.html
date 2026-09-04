@@ -560,14 +560,89 @@
           <div class="drawer-row"><span>Session Limit</span><span>30 min</span></div>
         </div>
       </aside>
+
+      <dialog class="game-info-dialog" id="gameInfoDialog" aria-labelledby="gameInfoTitle">
+        <div class="game-info-shell">
+          <header class="game-info-head">
+            <div>
+              <span class="game-info-kicker">Game guide</span>
+              <h2 id="gameInfoTitle">How to play</h2>
+            </div>
+            <button class="icon-button" id="closeGameInfo" aria-label="Close game guide">×</button>
+          </header>
+
+          <div class="game-info-panels">
+            <section class="game-info-panel how-to-panel" id="howToPanel" role="tabpanel" aria-labelledby="howToTab">
+              <div class="rules-visual" aria-label="Animated STACKS target example">
+                <div id="rules-scene" aria-hidden="true"></div>
+                <div class="rules-target-line" aria-hidden="true"><span>Target <b id="rulesTargetLabel">2.50x</b></span></div>
+              </div>
+
+              <div class="rules-copy">
+                <ol class="rules-steps">
+                  <li><span>1</span><div><strong>Set your bet</strong><p>Choose how much you want to play before the round starts.</p></div></li>
+                  <li><span>2</span><div><strong>Choose your target</strong><p>Pick the multiplier the stack needs to reach.</p></div></li>
+                  <li><span>3</span><div><strong>Watch the stack</strong><p>Blocks build while the live multiplier rises.</p></div></li>
+                  <li><span>4</span><div><strong>Win or break</strong><p>Reach your target to win. If the stack breaks first, you lose the bet.</p></div></li>
+                </ol>
+
+                <div class="rules-outcomes" aria-label="Example outcomes">
+                  <div class="outcome-win"><span>Reach <b id="rulesWinTarget">2.50x</b></span><small>You win</small><strong id="rulesWinValue">250.00</strong></div>
+                  <div class="outcome-loss"><span>Break before <b id="rulesLossTarget">2.50x</b></span><small>You lose</small><strong id="rulesLossValue">100.00</strong></div>
+                </div>
+              </div>
+
+              <div class="bonus-legend" aria-label="Bonus mode milestones">
+                <span>Bonus modes</span>
+                <div><strong>1.50x</strong><small>Stack Bonus</small></div>
+                <div><strong>3.00x</strong><small>Double Stack</small></div>
+                <div><strong>7.00x</strong><small>Super Stack</small></div>
+                <div><strong>25.00x</strong><small>Legendary</small></div>
+              </div>
+            </section>
+
+            <section class="game-info-panel bonus-panel" id="bonusPanel" role="tabpanel" aria-labelledby="bonusTab" hidden>
+              <header class="panel-intro"><span>Multiplier milestones</span><p>Higher stages change the tower pace and celebration. Your payout always uses the target you selected.</p></header>
+              <div class="bonus-stage-list">
+                <div><strong>1.50x</strong><span>Stack Bonus</span><p>Extra blocks join the build.</p></div>
+                <div><strong>3.00x</strong><span>Double Stack</span><p>Block growth increases.</p></div>
+                <div><strong>7.00x</strong><span>Super Stack</span><p>The tower builds at its fastest pace.</p></div>
+                <div><strong>25.00x</strong><span>Legendary</span><p>The highest celebration tier begins.</p></div>
+              </div>
+              <p class="bonus-note">Bonus modes do not multiply the selected payout. Maximum target and displayed result: 1000x.</p>
+            </section>
+
+            <section class="game-info-panel history-panel" id="historyPanel" role="tabpanel" aria-labelledby="historyTab" hidden>
+              <header class="panel-intro"><span>Current session</span><p>Your latest rounds appear first.</p></header>
+              <div class="history-table-wrap">
+                <table class="history-table">
+                  <thead><tr><th>Round</th><th>Target</th><th>Result</th><th>Bet</th><th>Payout</th><th>Status</th></tr></thead>
+                  <tbody id="dialogHistoryRows"></tbody>
+                </table>
+                <div class="history-empty" id="dialogHistoryEmpty">No rounds played yet.</div>
+              </div>
+            </section>
+          </div>
+
+          <footer class="game-info-footer">
+            <div class="game-info-tabs" role="tablist" aria-label="Game information">
+              <button id="howToTab" role="tab" aria-selected="true" aria-controls="howToPanel" data-info-panel="how-to">How to play</button>
+              <button id="bonusTab" role="tab" aria-selected="false" aria-controls="bonusPanel" data-info-panel="bonus">Bonus modes</button>
+              <button id="historyTab" role="tab" aria-selected="false" aria-controls="historyPanel" data-info-panel="history">Round history</button>
+            </div>
+            <button class="game-info-done" id="doneGameInfo">Done</button>
+          </footer>
+        </div>
+      </dialog>
     </main>
 
-    <script type="module" src="./main.js?v=13"></script>
+    <script type="module" src="./main.js?v=15"></script>
     <link rel="stylesheet" href="./game.css?v=3" />
     <link rel="stylesheet" href="./arcade-console.css?v=4" />
     <link rel="stylesheet" href="./prediction-ruler.css?v=2" />
     <link rel="stylesheet" href="./win-celebration.css?v=2" />
     <link rel="stylesheet" href="./recent-results.css?v=2" />
+    <link rel="stylesheet" href="./game-info-dialog.css?v=2" />
     <script>
       const drawer = document.querySelector('#settingsDrawer');
       const toggleDrawer = () => drawer.classList.toggle('open');

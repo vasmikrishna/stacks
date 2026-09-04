@@ -20,7 +20,7 @@ const hook=`
  previewTools.querySelectorAll('button').forEach((button,i)=>button.onclick=()=>previewWin([1.2,1.5,3,7,25][i]));
  previewTools.querySelector('input').oninput=e=>{previewTime=state.ended+Number(e.target.value);};
  action.addEventListener('click',()=>{previewTime=null;},{capture:true});
- state.history=[2.96,1.08,12.60,3.84,.73].map((at,index)=>({at,target:2.5,bet:10000,payout:index===4?0:25000,won:index!==4}));
+ state.history=[2.96,1.08,12.60,3.84,.73].map(at=>({at,target:2.5,bet:10000,payout:at>=2.5?25000:0,won:at>=2.5}));
  renderRoundHistory();
 `;
 const types={'.html':'text/html','.css':'text/css','.js':'text/javascript','.mjs':'text/javascript','.svg':'image/svg+xml','.png':'image/png','.ttf':'font/ttf','.wasm':'application/wasm'};

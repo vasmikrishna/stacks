@@ -1,3 +1,19 @@
+# Game Guide And History Dialog QA
+
+final result: passed
+
+- Selected visual target: option 3, `/Users/vamsikrishnavh/.codex/generated_images/01a06a8c-d513-7251-9766-f39a031a38c4/exec-6ae948f9-9721-4214-a38a-5ae04fe00dce.png`.
+- Final 1280 x 720 browser capture: `/tmp/stacks-game-guide-final.jpg`. The selected reference and prototype were opened together in `/tmp/stacks-game-guide-comparison.png`.
+- Settings now exposes dedicated `How to play` and `Round history` actions. Each opens the same focused modal at the requested section; the Settings drawer remains behind it and receives focus again when the modal closes.
+- How to Play matches the selected split composition: a real, independently rendered Three.js tesseract stack and rotating plate at left; four concise instructions and live win/break calculations at right; bonus thresholds and navigation along the bottom.
+- The guide reads the current bet and prediction. A browser check changed the controls to 200.00 and 3.50x and correctly displayed a 700.00 win versus a 200.00 loss.
+- Bonus Modes explains all four existing thresholds without changing the payout contract. Round History shows newest-first rounds with target, result, bet, payout, and semantic win/loss status; the empty state appears before any rounds.
+- The modal supports close, Done, Escape, backdrop close, arrow-key tab navigation, focus return, and responsive overflow handling. Desktop has no page-level horizontal or vertical overflow; narrow layouts stack the guide and make the history table independently scrollable.
+- Two browser captures 450ms apart produced different image hashes, confirming that the guide's real 3D preview continues animating. Motion settings and reduced-motion preferences stop this movement.
+- No browser console errors were observed. Main-module syntax, ten focused math/scale/history/win tests, and whitespace checks pass.
+
+---
+
 # Prism Tesseract Win Branch QA
 
 final result: passed

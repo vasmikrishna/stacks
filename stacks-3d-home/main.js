@@ -72,10 +72,60 @@ const message = document.createElement('div');
 message.className = 'round-message';
 message.setAttribute('role', 'status');
 const recentResults=createRecentResults($('.stage'));
+const gameInfoDialog=$('#gameInfoDialog');
+const infoPanels={
+ 'how-to':$('#howToPanel'),
+ bonus:$('#bonusPanel'),
+ history:$('#historyPanel'),
+};
+let activeInfoPanel='how-to',gameInfoOrigin=null;
 function resultValues(){return state.history.slice(0,5).map(round=>multiplierUnits(round.at)/100);}
+function renderDialogHistory(){
+ const rows=$('#dialogHistoryRows'),empty=$('#dialogHistoryEmpty');
+ rows.innerHTML=state.history.map((round,index)=>{
+  const result=multiplierUnits(round.at)/100;
+  return `<tr>
+   <td>#${state.history.length-index}</td>
+   <td>${round.target.toFixed(2)}x</td>
+   <td class="result-${result>=10?'legendary':round.won?'win':'loss'}">${result.toFixed(2)}x</td>
+   <td>${money(round.bet)}</td>
+   <td>${money(round.payout)}</td>
+   <td><span class="history-status ${round.won?'is-win':'is-loss'}">${round.won?'Win':'Loss'}</span></td>
+  </tr>`;
+ }).join('');
+ empty.hidden=state.history.length>0;
+ $('.history-table').hidden=!state.history.length;
+}
 function renderRoundHistory(){
- $('#history').innerHTML=state.history.length?state.history.map(r=>`<div class="history-row"><span>${r.won?'Win':'Loss'} · Prediction ${r.target.toFixed(2)}x · Result ${(multiplierUnits(r.at)/100).toFixed(2)}x</span><span>${money(r.bet)} → ${money(r.payout)}</span></div>`).join(''):'No rounds yet.';
+ renderDialogHistory();
  recentResults.render(resultValues());
+}
+function updateRulesMath(){
+ const stake=Math.max(1,Number($('#bet').value)||100);
+ const target=Math.min(1000,Math.max(1.01,Number($('#prediction').value)||2.5));
+ const targetLabel=target.toFixed(2)+'x';
+ for(const selector of ['#rulesTargetLabel','#rulesWinTarget','#rulesLossTarget'])$(selector).textContent=targetLabel;
+ $('#rulesWinValue').textContent=money(payout(Math.round(stake*100),multiplierUnits(target)));
+ $('#rulesLossValue').textContent=stake.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function selectInfoPanel(name,focus=false){
+ activeInfoPanel=infoPanels[name]?name:'how-to';
+ for(const [panelName,panel] of Object.entries(infoPanels))panel.hidden=panelName!==activeInfoPanel;
+ document.querySelectorAll('[data-info-panel]').forEach(tab=>{
+  const selected=tab.dataset.infoPanel===activeInfoPanel;
+  tab.setAttribute('aria-selected',selected);tab.tabIndex=selected?0:-1;
+  if(selected&&focus)tab.focus();
+ });
+ const titles={'how-to':'How to play',bonus:'Bonus modes',history:'Round history'};
+ $('#gameInfoTitle').textContent=titles[activeInfoPanel];
+ updateRulesMath();
+ if(activeInfoPanel==='how-to')requestAnimationFrame(()=>{ensureRulesScene();resizeRulesScene();});
+}
+function openGameInfo(name,origin){
+ gameInfoOrigin=origin||document.activeElement;
+ selectInfoPanel(name);
+ if(!gameInfoDialog.open)gameInfoDialog.showModal();
+ requestAnimationFrame(()=>document.querySelector(`[data-info-panel="${activeInfoPanel}"]`)?.focus());
 }
 function reportInputError(selector,text){
  const input=$(selector);
@@ -91,10 +141,27 @@ $('.drawer-list').innerHTML = `
  <label class="drawer-row autoplay-field autoplay-only">Stop on profit<input id="profit" type="number" min="1" value="500"></label>
  <label class="drawer-row autoplay-field autoplay-only">Stop on loss<input id="loss" type="number" min="1" value="500"></label>
  <button class="autoplay-start autoplay-only" id="startAutoplay"><img src="./assets/arcade/autoplay.svg" alt=""><span>Start Autoplay</span></button>
- <details class="general-setting"><summary>Rules & stages</summary><p>Select your stake and prediction before starting. A result at or above your prediction pays your stake multiplied by that prediction, including the original stake. A lower result loses the stake. Predicting 2.50x with a 100x result pays 2.50x, and the tower continues to 100x.</p><p>Stack Bonus adds blocks, Double Stack doubles block growth, and Super Stack speeds up the tower. Legendary Stack celebrates 25x. Stages do not increase the selected payout. Maximum prediction and displayed result: 1000x.</p><p>Demo math: 96.5% theoretical return before cent rounding. Payouts round down to whole cents.</p><p>Local demo credits and browser-generated results. Stake is not connected.</p></details>
- <details class="general-setting"><summary>Round history</summary><div id="history">No rounds yet.</div></details>
+ <button class="drawer-row general-setting info-dialog-link" id="openRules"><span>How to play</span><img src="./assets/arcade/play.svg" alt=""></button>
+ <button class="drawer-row general-setting info-dialog-link" id="openHistory"><span>Round history</span><img src="./assets/arcade/play.svg" alt=""></button>
  <button class="drawer-row general-setting replay-intro" id="replayIntro"><span>Replay introduction</span><img src="./assets/arcade/play.svg" alt=""></button>
  <button class="drawer-row general-setting" id="reset">Reset demo balance<span>↻</span></button>`;
+
+$('#openRules').onclick=event=>openGameInfo('how-to',event.currentTarget);
+$('#openHistory').onclick=event=>openGameInfo('history',event.currentTarget);
+$('#closeGameInfo').onclick=()=>gameInfoDialog.close();
+$('#doneGameInfo').onclick=()=>gameInfoDialog.close();
+document.querySelectorAll('[data-info-panel]').forEach(tab=>{
+ tab.onclick=()=>selectInfoPanel(tab.dataset.infoPanel);
+ tab.onkeydown=event=>{
+  if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+  event.preventDefault();
+  const tabs=[...document.querySelectorAll('[data-info-panel]')],index=tabs.indexOf(tab);
+  const next=tabs[(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];
+  selectInfoPanel(next.dataset.infoPanel,true);
+ };
+});
+gameInfoDialog.addEventListener('click',event=>{if(event.target===gameInfoDialog)gameInfoDialog.close();});
+gameInfoDialog.addEventListener('close',()=>gameInfoOrigin?.focus());
 
 let audio;
 let lastGrowthAt=0,lastGrowthUnits=100;
@@ -339,7 +406,7 @@ $('#barSettings').addEventListener('click',()=>{
  $('#settingsDrawer h2').textContent='Settings';
 });
 $('#reset').onclick=()=>{ state.balance=1245000; state.history=[]; state.payout=0; renderRoundHistory(); update(); };
-document.addEventListener('keydown',e=>{ if(document.body.classList.contains('intro-active'))return; if(e.key==='Escape')$('#settingsDrawer').classList.remove('open'); if(e.code==='Space' && !['INPUT','BUTTON','SUMMARY'].includes(e.target.tagName) && !$('#settingsDrawer').classList.contains('open')){ e.preventDefault(); action.click(); } });
+document.addEventListener('keydown',e=>{ if(document.body.classList.contains('intro-active')||gameInfoDialog.open)return; if(e.key==='Escape')$('#settingsDrawer').classList.remove('open'); if(e.code==='Space' && !['INPUT','BUTTON','SUMMARY'].includes(e.target.tagName) && !$('#settingsDrawer').classList.contains('open')){ e.preventDefault(); action.click(); } });
 
 const mount=$('#stack-scene');
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
@@ -482,6 +549,55 @@ const ring=new THREE.Mesh(new THREE.TorusGeometry(3.8,.022,8,100),new THREE.Mesh
 const turntable=new THREE.Group();scene.add(turntable);turntable.add(platform,ring,stack);
 platform.receiveShadow=true;
 const effects=stageEffects(scene,turntable);
+let rulesRenderer=null,rulesScene=null,rulesCamera=null,rulesTower=null,rulesBlocks=[];
+function ensureRulesScene(){
+ if(rulesRenderer)return;
+ const rulesMount=$('#rules-scene');
+ rulesRenderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+ rulesRenderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+ rulesRenderer.outputColorSpace=THREE.SRGBColorSpace;
+ rulesRenderer.toneMapping=THREE.ACESFilmicToneMapping;
+ rulesRenderer.toneMappingExposure=1.18;
+ rulesMount.append(rulesRenderer.domElement);
+ rulesScene=new THREE.Scene();
+ rulesScene.fog=new THREE.FogExp2(0x050a10,.045);
+ rulesScene.add(new THREE.HemisphereLight(0xb8f5ff,0x1a102b,1.25));
+ const key=new THREE.DirectionalLight(0xe8fbff,3.2);key.position.set(-3,6,5);rulesScene.add(key);
+ const violet=new THREE.PointLight(0x7b55ff,18);violet.position.set(3,2,2);rulesScene.add(violet);
+ rulesTower=new THREE.Group();rulesScene.add(rulesTower);
+ const guideMaterials=crystalMaterials();
+ const guideEdgeMaterial=new THREE.LineBasicMaterial({color:0x64eaff,transparent:true,opacity:.34,toneMapped:false});
+ const positions=[[-.86,0,0],[0,0,0],[.86,0,0],[-.43,.84,0],[.43,.84,0],[0,1.68,0]];
+ positions.forEach((position,index)=>{
+  const block=new THREE.Mesh(geo,guideMaterials[index%2]);
+  block.add(new THREE.LineSegments(edges,guideEdgeMaterial));
+  crystalDetails(block,index);block.position.set(...position);rulesTower.add(block);rulesBlocks.push(block);
+ });
+ const guidePlatform=new THREE.Mesh(new THREE.CylinderGeometry(2.65,2.85,.25,64),new THREE.MeshStandardMaterial({color:0x111c25,metalness:.72,roughness:.26}));
+ guidePlatform.position.y=-.58;rulesTower.add(guidePlatform);
+ const guideRing=new THREE.Mesh(new THREE.TorusGeometry(2.7,.022,8,96),new THREE.MeshBasicMaterial({color:0x52e5f1,toneMapped:false}));
+ guideRing.rotation.x=Math.PI/2;guideRing.position.y=-.44;rulesTower.add(guideRing);
+ rulesCamera=new THREE.PerspectiveCamera(36,1,.1,40);rulesCamera.position.set(3.4,2.8,7.6);rulesCamera.lookAt(0,.65,0);
+ new ResizeObserver(resizeRulesScene).observe(rulesMount);
+}
+function resizeRulesScene(){
+ if(!rulesRenderer)return;
+ const mount=$('#rules-scene'),width=Math.max(1,mount.clientWidth),height=Math.max(1,mount.clientHeight);
+ rulesRenderer.setSize(width,height,false);rulesCamera.aspect=width/height;rulesCamera.updateProjectionMatrix();
+}
+function renderRulesScene(dt){
+ if(!gameInfoDialog.open||activeInfoPanel!=='how-to')return;
+ ensureRulesScene();
+ if(state.motion&&!reducedMotion.matches){
+  rulesTower.rotation.y+=dt*.22;
+  for(const block of rulesBlocks){
+   block.userData.core.rotation.y+=dt*.48*block.userData.spinDirection;
+   block.userData.core.rotation.x+=dt*.2;
+   block.userData.innerCore.rotation.z-=dt*.65;
+  }
+ }
+ rulesRenderer.render(rulesScene,rulesCamera);
+}
 // Asymmetric rim inlays make rotation visible on the circular platform.
 for(let i=0;i<12;i++){
  const mark=new THREE.Mesh(new THREE.BoxGeometry(i%3===0?.28:.12,.025,.07),new THREE.MeshBasicMaterial({color:i%3===0?0xffcc66:0x43bddd}));
@@ -582,6 +698,7 @@ document.addEventListener('keydown',event=>{
 function start(){
  if(state.phase==='running')return;
  $('#settingsDrawer').classList.remove('open','autoplay-open');
+ if(gameInfoDialog.open)gameInfoDialog.close();
  clearTimeout(nextRound);
  const bet=Math.round(Number($('#bet').value)*100), target=multiplierUnits(Number($('#prediction').value))/100;
  if(!Number.isFinite(bet)||bet<100||bet>state.balance){state.auto=false;update();reportInputError('#bet','Enter a valid stake within your balance.');return;}
@@ -727,6 +844,7 @@ function animate(now){
  ring.material.color.lerp(new THREE.Color(broken?0xff515c:stageColor),Math.min(1,dt*4));
  effects.update(dt,moving,broken?0xff515c:stageColor,state.bonus,cameraHeight,state.phase==='running');
  $('.multiplier').style.color=broken?'#ff515c':state.phase==='won'?'#4cef97':'#e8faff';
+ renderRulesScene(dt);
  renderer.render(scene,camera);dismissLoader();requestAnimationFrame(animate);
 }
 renderRoundHistory();rebuild(10);update();requestAnimationFrame(animate);
