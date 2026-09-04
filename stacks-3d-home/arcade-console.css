@@ -1,0 +1,99 @@
+@font-face { font-family: Rajdhani; src: url('./assets/arcade/rajdhani-medium.ttf') format('truetype'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: Rajdhani; src: url('./assets/arcade/rajdhani-semibold.ttf') format('truetype'); font-weight: 600; font-style: normal; font-display: swap; }
+
+.bottom-playbar {
+  grid-template-columns: minmax(230px, 28%) minmax(220px, 1fr) 64px minmax(150px, 18%) 64px;
+  gap: 0; min-height: 98px; padding: 10px 16px;
+  border: 0; border-top: 2px solid #50dbe4; border-radius: 3px;
+  background: #11171d; box-shadow: none; backdrop-filter: none;
+  font-family: Rajdhani, 'Arial Narrow', sans-serif;
+}
+.bottom-playbar .control label {
+  color: #adb9c4; font-family: inherit; font-size: 16px;
+  font-weight: 600; line-height: 20px; letter-spacing: 0;
+}
+.bottom-playbar .bet-control { gap: 6px; padding: 0 24px 0 4px; min-width: 0; }
+.bottom-playbar .stepper { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 4px; }
+.bottom-playbar .stepper button, .bottom-playbar .value {
+  height: 44px; background: #10151b; border: 1px solid #303b45; border-radius: 3px;
+  font-family: inherit; font-size: 25px; line-height: 1; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.bottom-playbar .stepper button { display: grid; place-items: center; }
+.bottom-playbar .stepper img { width: 21px; height: 21px; filter: invert(1); }
+.bottom-playbar .value { appearance: textfield; }
+.bottom-playbar .value::-webkit-inner-spin-button, .bottom-playbar .value::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.bottom-playbar .play-button {
+  grid-column: auto; grid-row: auto; display: flex; align-items: center; justify-content: center;
+  gap: 16px; height: 68px; width: 100%; min-width: 0; padding: 8px 16px;
+  border-radius: 3px; background: #64e58c; color: #07110b;
+  font: 600 29px/1.1 Rajdhani, 'Arial Narrow', sans-serif; text-transform: uppercase;
+}
+.bottom-playbar .play-button img { width: 26px; height: 26px; }
+.bottom-playbar .play-button:hover:not(:disabled) { background: #85efa5; }
+.bottom-playbar .play-button:disabled { opacity: .65; }
+.bottom-playbar .action-label { min-width: 0; overflow-wrap: anywhere; }
+.bottom-playbar .autoplay-control {
+  grid-column: auto; grid-row: auto; display: flex; align-items: center; justify-content: center;
+  gap: 18px; height: 76px; margin-left: 16px; padding: 0 12px;
+  border-right: 1px solid #232d36;
+}
+.bottom-playbar .autoplay-copy { display: grid; align-content: center; min-width: 58px; }
+.bottom-playbar .autoplay-control label { cursor: pointer; }
+.bottom-playbar #autoplayProgress {
+ color: #64e58c; font-size: 15px; font-weight: 700; line-height: 16px;
+ font-variant-numeric: tabular-nums;
+}
+.bottom-playbar .toggle-pill {
+  display: grid; place-items: center; flex: 0 0 52px; width: 52px; height: 52px;
+  border: 1px solid #5de5ed; border-radius: 50%; background: #0e141a; padding: 9px;
+}
+.bottom-playbar .toggle-pill::after { content: none; }
+.bottom-playbar .toggle-pill img { width: 32px; height: 32px; filter: invert(1); }
+.bottom-playbar .toggle-pill:hover:not(:disabled) { background: #1b2b32; }
+.bottom-playbar .toggle-pill[aria-checked='true'] { background: #64e58c; border-color: #64e58c; }
+.bottom-playbar .toggle-pill[aria-checked='true'] img { filter: none; }
+.bottom-playbar .turbo-button {
+  display: grid; place-items: center; justify-self: center; width: 52px; height: 52px;
+  border: 1px solid #56636e; border-radius: 50%; background: #0e141a; padding: 12px;
+}
+.bottom-playbar .turbo-button img { width: 27px; height: 27px; filter: invert(1); }
+.bottom-playbar .turbo-button:hover:not(:disabled) { border-color: #ffd35a; background: #242115; }
+.bottom-playbar .turbo-button[aria-checked='true'] {
+  border-color: #ffd35a; background: #ffd35a; box-shadow: 0 0 16px #ffd35a55;
+}
+.bottom-playbar .turbo-button[aria-checked='true']:hover:not(:disabled) { background: #ffe078; }
+.bottom-playbar .turbo-button[aria-checked='true'] img { filter: none; }
+.bottom-playbar #barSettings {
+  grid-column: auto; grid-row: auto; justify-self: end; width: 48px; height: 56px;
+  border-radius: 3px; background: #10151b; border-color: #303b45;
+}
+.bottom-playbar #barSettings img { width: 26px; height: 26px; filter: invert(1); }
+.bottom-playbar #barSettings:hover { background: #202b34; }
+@media (max-width: 1050px) {
+  .bottom-playbar { grid-template-columns: 230px minmax(180px,1fr) 52px 138px 52px; padding: 10px; }
+  .bottom-playbar .bet-control { padding-right: 14px; }
+  .bottom-playbar .autoplay-control { margin-left: 10px; gap: 10px; padding: 0 8px; }
+  .bottom-playbar .control label { font-size: 14px; }
+  .bottom-playbar .play-button { font-size: 24px; gap: 10px; }
+  .bottom-playbar .toggle-pill { flex-basis: 44px; width: 44px; height: 44px; padding: 6px; }
+}
+@media (max-width: 700px) {
+  .app { grid-template-rows: 60px minmax(0,1fr) 88px 154px; }
+  .bottom-playbar { grid-template-columns: minmax(0,1fr) 44px 106px 44px; grid-template-rows: 64px 52px; gap: 8px; padding: 10px; min-height: 148px; }
+  .bottom-playbar .bet-control { grid-column: 1; grid-row: 1; padding: 0; gap: 3px; }
+  .bottom-playbar .stepper { grid-template-columns: 34px minmax(0,1fr) 34px; gap: 3px; }
+  .bottom-playbar .stepper button, .bottom-playbar .value { height: 40px; font-size: 23px; }
+  .bottom-playbar .play-button { grid-column: 1 / -1; grid-row: 2; height: 52px; font-size: 25px; }
+  .bottom-playbar .turbo-button { grid-column: 2; grid-row: 1; width: 42px; height: 42px; padding: 9px; }
+  .bottom-playbar .autoplay-control { grid-column: 3; grid-row: 1; margin: 0; padding: 0; height: 64px; border: 0; gap: 5px; }
+  .bottom-playbar .autoplay-control label { font-size: 13px; }
+  .bottom-playbar .toggle-pill { flex-basis: 42px; width: 42px; height: 42px; }
+  .bottom-playbar #barSettings { grid-column: 4; grid-row: 1; width: 40px; height: 44px; }
+}
+@media (max-width: 380px) {
+  .bottom-playbar { grid-template-columns: minmax(0,1fr) 44px 52px 44px; }
+  .bottom-playbar .autoplay-control label { display: none; }
+  .bottom-playbar .autoplay-copy { min-width: 0; }
+  .bottom-playbar #autoplayProgress { font-size: 12px; text-align: center; }
+}

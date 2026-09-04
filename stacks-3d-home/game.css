@@ -8,7 +8,7 @@ body { min-width: 0; background: #080c12; }
 .hud .multiplier { font-size: 56px; }
 .hud .label, .balance span, .control label, .stage-status span { letter-spacing: 0; }
 .stage-status { background: transparent; border: 0; top: 20px; }
-.bottom-playbar { grid-template-columns: minmax(140px,210px) 130px minmax(150px,1fr) 48px; }
+.bottom-playbar { grid-template-columns: minmax(140px,210px) minmax(150px,1fr) 56px 130px 48px; }
 .prediction-panel { width: min(480px,100%); justify-self: center; align-self: center; }
 .prediction-panel > label { text-align: center; }
 .value { width: 100%; min-width: 0; text-align: center; font: inherit; font-weight: 700; }
@@ -22,6 +22,9 @@ body { min-width: 0; background: #080c12; }
 .prediction-track { position: relative; height: 68px; min-width: 0; --live-progress: 0%; --live-color: #53dcff; }
 .prediction-track[data-phase="won"] { --live-color: #53dcff; }
 .prediction-track[data-phase="broken"] { --live-color: #ff6570; }
+.prediction-panel[data-reached="true"] .prediction-track { --live-color: #54f5a0; }
+.prediction-panel[data-reached="true"] .prediction-number { border-color: #54f5a0; }
+.prediction-panel[data-reached="true"] #prediction { color: #80f7b6; }
 .live-track { position: absolute; top: 18px; left: 8px; right: 8px; height: 4px; background: #46535f; pointer-events: none; z-index: 1; }
 .live-fill { height: 100%; width: var(--live-progress); background: var(--live-color); }
 .live-marker { position: absolute; left: var(--live-progress); top: -3px; width: 10px; height: 10px; background: var(--live-color); transform: translateX(-50%) rotate(45deg); }
@@ -73,26 +76,41 @@ button:focus-visible, input:focus-visible { outline: 2px solid #63dcff; outline-
  .win-amount { font-size: 27px; }
  .score-burst span { font-size: 15px; }
 }
+
 .settings-drawer { z-index: 5; max-height: calc(100dvh - 160px); overflow: auto; visibility: hidden; }
 .settings-drawer.open { visibility: visible; }
+.settings-drawer:not(.autoplay-open) .autoplay-only { display: none; }
+.settings-drawer.autoplay-open .general-setting { display: none; }
 .drawer-row { width: 100%; text-align: left; gap: 12px; flex-shrink: 0; }
 .drawer-row input[type=number] { width: 82px; padding: 6px; background: #18212b; color: white; border: 1px solid #46535f; border-radius: 4px; }
 .drawer-row #musicVolume { width: 120px; accent-color: #35ed8b; }
+.autoplay-field { border-left: 2px solid #50dbe4; }
+.autoplay-start {
+ display: flex; align-items: center; justify-content: center; gap: 10px;
+ width: 100%; min-height: 48px; border: 0; border-radius: 4px;
+ background: #64e58c; color: #07110b; font: 600 18px/1 Rajdhani, 'Arial Narrow', sans-serif;
+ text-transform: uppercase;
+}
+.autoplay-start:hover:not(:disabled) { background: #85efa5; }
+.autoplay-start img { width: 22px; height: 22px; }
+.autoplay-start:disabled { opacity: .55; cursor: default; }
+.settings-drawer.autoplay-open .autoplay-field { border-color: #64e58c; }
 .drawer-list p { font-size: 13px; color: #a7b7c5; line-height: 1.6; }
 .drawer-list summary { cursor: pointer; padding: 12px 0; }
 .history-row { display: flex; justify-content: space-between; font-size: 12px; padding: 9px 0; border-bottom: 1px solid #24323d; }
+.replay-intro img { width: 18px; height: 18px; filter: invert(1); }
 @media(max-width:700px) {
  .app { padding: 0 10px 10px; grid-template-rows: 60px minmax(0,1fr) 104px 165px; }
- .brand-title { font-size: 23px; } .brand-mark { display:none; }
+ .brand-logo { height: 42px; max-width: 154px; }
  .balance { min-width: 120px; padding: 0; } .balance strong { font-size: 18px; }
  .topbar { padding: 0 4px; } .wallet { gap: 6px; }
  .hud { left: 4px; top: 14px; } .hud .multiplier { font-size: 38px; }
  .stage-status { right: 0; top: 8px; min-width: 100px; padding: 8px; } .stage-status strong { font-size: 24px; }
- .bottom-playbar { grid-template-columns: 1fr 1fr 44px; gap: 8px; padding: 10px; }
+ .bottom-playbar { grid-template-columns: minmax(0,1fr) 44px 106px 44px; gap: 8px; padding: 10px; }
  .bottom-playbar .control:nth-child(2) { grid-column: 2; grid-row: 1; }
  .prediction-panel { width: min(480px,calc(100% - 24px)); }
  .play-button { grid-column: 2; grid-row: 2; height: 46px; font-size: 16px; }
- #barSettings { grid-column:3; grid-row:2; width: 40px; height:44px; }
+ #barSettings { grid-column:4; grid-row:1; width: 40px; height:44px; }
  .stepper { grid-template-columns: 30px 1fr 30px; gap:4px; }
  .settings-drawer { right: 10px; bottom: 175px; width: min(318px,calc(100% - 20px)); max-height:calc(100dvh - 250px); }
  .round-message { font-size:14px; bottom: 8px; }

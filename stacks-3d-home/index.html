@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>STACKS 3D Main Screen</title>
+    <link rel="stylesheet" href="./loading-screen.css?v=2" />
+    <link rel="stylesheet" href="./intro-flow.css?v=1" />
     <style>
       :root {
         color-scheme: dark;
@@ -33,13 +35,17 @@
           radial-gradient(circle at 64% 30%, rgba(139, 92, 246, 0.12), transparent 26%),
           linear-gradient(180deg, #071526 0%, var(--bg) 58%, #010309 100%);
         color: var(--text);
-        font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: Rajdhani, "Arial Narrow", sans-serif;
+        font-weight: 500;
       }
 
       button {
         font: inherit;
         cursor: pointer;
+      }
+
+      input, select, textarea {
+        font-family: inherit;
       }
 
       .app {
@@ -74,44 +80,11 @@
         gap: 12px;
       }
 
-      .brand-mark {
-        position: relative;
-        width: 42px;
-        height: 42px;
-        border-radius: 8px;
-        background: rgba(57, 217, 255, 0.1);
-        box-shadow: 0 0 28px rgba(57, 217, 255, 0.28);
-      }
-
-      .brand-mark span {
-        position: absolute;
-        width: 15px;
-        height: 15px;
-        border: 1px solid rgba(229, 252, 255, 0.75);
-        border-radius: 4px;
-        background: linear-gradient(135deg, var(--cyan), var(--violet));
-        box-shadow: 0 0 14px rgba(57, 217, 255, 0.6);
-      }
-
-      .brand-mark span:nth-child(1) {
-        left: 7px;
-        bottom: 8px;
-      }
-
-      .brand-mark span:nth-child(2) {
-        left: 20px;
-        bottom: 8px;
-      }
-
-      .brand-mark span:nth-child(3) {
-        left: 14px;
-        bottom: 21px;
-      }
-
-      .brand-title {
-        font-size: 30px;
-        font-weight: 950;
-        letter-spacing: 0;
+      .brand-logo {
+        display: block;
+        width: auto;
+        height: 50px;
+        object-fit: contain;
       }
 
       .balance {
@@ -452,15 +425,76 @@
     </style>
   </head>
   <body>
+    <div class="game-loader" id="gameLoader" role="status" aria-live="polite" aria-label="Loading STACKS">
+      <div class="game-loader__content">
+        <img class="game-loader__logo" src="./assets/logo-velocity.png" alt="STACKS">
+        <div class="game-loader__stack" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
+        <div class="game-loader__track" role="progressbar" aria-label="Loading game">
+          <span></span>
+        </div>
+        <span class="game-loader__status">Loading game</span>
+      </div>
+    </div>
+    <section class="intro-flow" id="introFlow" aria-label="STACKS introduction" hidden>
+      <button class="intro-skip" id="skipIntro">Skip intro</button>
+
+      <div class="intro-screen intro-screen--welcome" data-intro-screen="1">
+        <img class="intro-logo" src="./assets/logo-velocity.png" alt="STACKS">
+        <p class="intro-tagline">Build higher. Cash out smarter.</p>
+        <button class="intro-primary" data-intro-next>
+          <img src="./assets/arcade/play.svg" alt="">
+          <span>Enter game</span>
+        </button>
+      </div>
+
+      <div class="intro-screen intro-screen--controls" data-intro-screen="2" hidden>
+        <h1>Choose your play</h1>
+        <div class="intro-potential"><span>Possible win</span><strong id="introPossibleWin">250.00</strong></div>
+        <p>Choose how much to stake and the multiplier you want to reach.</p>
+        <button class="intro-primary intro-primary--compact" data-intro-next>
+          <span>Next</span>
+        </button>
+      </div>
+
+      <div class="intro-screen intro-screen--win" data-intro-screen="3" hidden>
+        <h1>Reach your target to win</h1>
+        <div class="intro-target-line" aria-hidden="true"><span id="introTargetLabel">2.50x</span></div>
+        <strong class="intro-equation" id="introEquation">100.00 x 2.50 = 250.00</strong>
+        <p>Reach or pass your target to win. Break below it and the stake is lost.</p>
+        <button class="intro-primary intro-primary--compact" data-intro-next>
+          <span>Next</span>
+        </button>
+      </div>
+
+      <div class="intro-screen intro-screen--bonus" data-intro-screen="4" hidden>
+        <h1>Bonus stages</h1>
+        <div class="intro-bonus-list" aria-label="Bonus stage milestones">
+          <div><strong>1.50x</strong><span>Stack Bonus</span></div>
+          <div><strong>3.00x</strong><span>Double Stack</span></div>
+          <div><strong>7.00x</strong><span>Super Stack</span></div>
+          <div><strong>25.00x</strong><span>Legendary Stack</span></div>
+        </div>
+        <p>Milestones transform the tower. Your selected target determines the payout.</p>
+        <button class="intro-primary" id="finishIntro">
+          <img src="./assets/arcade/play.svg" alt="">
+          <span>Start stacking</span>
+        </button>
+      </div>
+
+      <div class="intro-progress" aria-label="Introduction progress">
+        <i class="active"></i><i></i><i></i><i></i>
+        <span class="sr-only" id="introProgressText">Step 1 of 4</span>
+      </div>
+    </section>
     <main class="app">
       <header class="topbar">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div class="brand-title">STACKS</div>
+          <img class="brand-logo" src="./assets/logo-velocity.png" alt="STACKS">
         </div>
         <div class="wallet">
           <div class="balance"><span>Demo Balance</span><strong>12,450.00</strong></div>
-          <button class="icon-button" id="topSettings" aria-label="Open settings">⚙</button>
         </div>
       </header>
 
@@ -489,28 +523,27 @@
             <div class="label">Current Multiplier</div>
             <div class="multiplier">3.42x</div>
           </div>
-          <div class="stage-status">
-            <span>Current Win</span>
-            <strong>342.00</strong>
-          </div>
         </div>
       </section>
 
       <section class="bottom-playbar" aria-label="Play controls">
-        <div class="control">
-          <label>Bet Amount</label>
+        <div class="control bet-control">
+          <label for="bet">Bet Amount</label>
           <div class="stepper"><button aria-label="Decrease bet">-</button><div class="value">100</div><button aria-label="Increase bet">+</button></div>
         </div>
         <div class="control">
           <label for="target">Predict Multiplier</label>
           <div class="stepper"></div>
         </div>
-        <div class="control">
-          <label>Autoplay</label>
-          <button class="toggle-pill" aria-label="Toggle autoplay">On</button>
-        </div>
         <button class="play-button">Start Stack</button>
-        <button class="icon-button" id="barSettings" aria-label="Open settings">⚙</button>
+        <button class="turbo-button" id="turbo" role="switch" aria-checked="false" aria-label="Turbo mode off" title="Turbo mode: faster round reveals">
+          <img src="./assets/arcade/zap.svg" alt="">
+        </button>
+        <div class="control autoplay-control">
+          <div class="autoplay-copy"><label for="autoplay">Autoplay</label><output id="autoplayProgress" aria-live="polite" hidden></output></div>
+          <button class="toggle-pill" id="autoplay" aria-label="Enable autoplay" title="Enable autoplay"></button>
+        </div>
+        <button class="icon-button" id="barSettings" aria-label="Open settings" title="Settings"><img src="./assets/arcade/settings.svg" alt=""></button>
       </section>
 
       <aside class="settings-drawer" id="settingsDrawer" aria-label="Settings panel">
@@ -529,12 +562,15 @@
       </aside>
     </main>
 
-    <script type="module" src="./main.js"></script>
-    <link rel="stylesheet" href="./game.css" />
+    <script type="module" src="./main.js?v=5"></script>
+    <link rel="stylesheet" href="./game.css?v=3" />
+    <link rel="stylesheet" href="./arcade-console.css?v=4" />
+    <link rel="stylesheet" href="./prediction-ruler.css?v=2" />
+    <link rel="stylesheet" href="./win-celebration.css" />
+    <link rel="stylesheet" href="./recent-results.css" />
     <script>
       const drawer = document.querySelector('#settingsDrawer');
       const toggleDrawer = () => drawer.classList.toggle('open');
-      document.querySelector('#topSettings').addEventListener('click', toggleDrawer);
       document.querySelector('#barSettings').addEventListener('click', toggleDrawer);
       document.querySelector('#closeSettings').addEventListener('click', () => drawer.classList.remove('open'));
     </script>

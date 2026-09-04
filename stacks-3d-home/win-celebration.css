@@ -1,0 +1,23 @@
+.stage[data-win]:not([data-win=""]) { --win-color: #ffda85; }
+.stage[data-win]:not([data-win=""]) .hud { visibility: hidden; }
+.round-message.win-message {
+ top: 12px; bottom: auto; left: 50%; translate: -50% 0;
+ width: max-content; max-width: calc(100% - 24px); padding: 0;
+ background: transparent; border: 0; text-shadow: none; z-index: 2;
+}
+.stage .win-title { font-size: 22px; font-weight: 600; line-height: 28px; color: #fff8e8; }
+.stage .win-amount { font-size: 64px; font-weight: 600; line-height: 1.1; min-height: 71px; color: #ffda85; }
+.stage .long-payout .win-amount { font-size: 42px; }
+.win-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 700px) {
+ .round-message.win-message { top: 8px; }
+ .stage .win-title { font-size: 17px; line-height: 22px; }
+ .stage .win-amount { font-size: 46px; min-height: 51px; }
+ .stage .long-payout .win-amount { font-size: 28px; }
+}
+@media (max-height: 700px) {
+ .round-message.win-message { top: 4px; }
+ .stage .win-title { font-size: 14px; line-height: 18px; }
+ .stage .win-amount { font-size: 36px; min-height: 40px; }
+ .stage .long-payout .win-amount { font-size: 25px; }
+}
