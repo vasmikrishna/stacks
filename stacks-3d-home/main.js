@@ -8,7 +8,7 @@ import { winTier, winTiming, displayedPayout, fountainParticle } from './win-tim
 import { createRecentResults } from './recent-results.js';
 import { createReplaySnapshot, seededUnit } from './replay.mjs';
 import { growthCue, landingCue } from './audio-design.mjs';
-import { apiAmount, amountText, targetMode } from './engine-contract.mjs?v=3';
+import { apiAmount, amountText, nearestTarget, targetMode, SUPPORTED_TARGETS } from './engine-contract.mjs?v=4';
 import { createEngineSession } from './engine-session.mjs';
 
 const $ = (s) => document.querySelector(s);
@@ -417,9 +417,20 @@ steppers[0].querySelectorAll('button').forEach((button, index)=>button.onclick=(
  input.value=Math.min(100000,Math.max(1,index?value*2:value/2)).toFixed(2);
 });
 function nudgePrediction(direction){
- $('#prediction').value=adjustPrediction(Number($('#prediction').value),direction).toFixed(2);
+ const current=Number($('#prediction').value);
+ let value;
+ if(engine.enabled){
+  const units=nearestTarget((Number.isFinite(current)?current:1.5)*100);
+  const index=SUPPORTED_TARGETS.indexOf(units);
+  value=SUPPORTED_TARGETS[Math.min(SUPPORTED_TARGETS.length-1,Math.max(0,index+direction))]/100;
+ }else value=adjustPrediction(current,direction);
+ $('#prediction').value=value.toFixed(2);
  $('#prediction').setCustomValidity('');
  syncPredictionSlider();
+}
+function normalizePrediction(value){
+ const smooth=snapPrediction(value);
+ return engine.enabled?nearestTarget(smooth*100)/100:smooth;
 }
 $('#predictionDown').onclick=()=>nudgePrediction(-1);
 $('#predictionUp').onclick=()=>nudgePrediction(1);
@@ -430,9 +441,14 @@ $('#target').oninput=()=>{
  $('#prediction').setCustomValidity('');
  $('#target').setAttribute('aria-valuetext',value.toFixed(2)+'x');
 };
+$('#target').onchange=()=>{
+ const value=normalizePrediction(Number($('#prediction').value));
+ $('#prediction').value=value.toFixed(2);
+ syncPredictionSlider();
+};
 $('#prediction').oninput=syncPredictionSlider;
 $('#prediction').onchange=()=>{
- if($('#prediction').value && $('#prediction').validity.valid)$('#prediction').value=snapPrediction(Number($('#prediction').value)).toFixed(2);
+ if($('#prediction').value && $('#prediction').validity.valid)$('#prediction').value=normalizePrediction(Number($('#prediction').value)).toFixed(2);
  syncPredictionSlider();
 };
 $('#target').onkeydown=e=>{
@@ -753,7 +769,7 @@ document.addEventListener('keydown',event=>{
  }
 });
 function lockPrediction(){
- const value=snapPrediction(Number($('#prediction').value));
+ const value=normalizePrediction(Number($('#prediction').value));
  $('#prediction').value=value.toFixed(2);syncPredictionSlider();
  return value;
 }
