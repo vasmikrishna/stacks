@@ -69,7 +69,7 @@ const { chromium } = require(playwrightPath);
   const waitReady = async page => {
     try { await page.waitForSelector('#gameLoader[hidden]', { state: 'attached', timeout: 60000 }); }
     catch (error) { throw new Error(`Frontend did not become ready: ${failures.join('; ') || error.message}`); }
-    await page.waitForFunction(() => typeof window.engineInspect === 'function');
+    await page.waitForFunction(() => typeof window.engineInspect === 'function', null, { timeout: 60000 });
   };
   const start = async page => {
     await page.locator('.play-button').click();
@@ -86,6 +86,13 @@ const { chromium } = require(playwrightPath);
     await desktop.locator('#prediction').fill('2.40');
     await desktop.locator('#prediction').press('Tab');
     assert.equal(await desktop.locator('#prediction').inputValue(), '2.50');
+    await desktop.locator('#bonusMode').click();
+    await desktop.locator('#modeDialog [data-mode="prism"]').click();
+    assert.equal(await desktop.locator('#modalPayout').textContent(), '5.00 (5.00x)');
+    assert.equal(await desktop.locator('body').getAttribute('data-mode'), 'classic');
+    await desktop.locator('#modeDialog').press('Escape');
+    assert.equal(await desktop.locator('#bonusMode').getAttribute('data-mode'), 'classic');
+    assert.equal(calls.filter(call => call.endpoint.endsWith('/play')).length, 0);
     await desktop.locator('#turbo').click();
     await start(desktop);
     assert.equal((await desktop.evaluate(() => window.engineInspect())).balance, 1150);
@@ -103,7 +110,9 @@ const { chromium } = require(playwrightPath);
     assert.equal(calls.filter(call => call.endpoint.endsWith('/play')).at(-1).body.mode, 'target_1000');
     assert.equal(calls.filter(call => call.endpoint.endsWith('/end-round')).length, 1, 'Auto-closed losses must not call end-round');
     for (const modeId of ['prism', 'tesseract', 'reactor']) {
-      await desktop.locator(`[data-mode="${modeId}"]`).click();
+      await desktop.locator("#bonusMode").click();
+      await desktop.locator(`#modeDialog [data-mode="${modeId}"]`).click();
+      await desktop.locator("#confirmMode").click();
       await desktop.locator('#prediction').fill('2.50');
       const before = balance;
       await start(desktop);
@@ -136,6 +145,13 @@ const { chromium } = require(playwrightPath);
     const mobilePixels=await mobile.locator('#stack-scene canvas').evaluate(c=>{const gl=c.getContext('webgl2'),p=new Uint8Array(c.width*c.height*4);gl.readPixels(0,0,c.width,c.height,gl.RGBA,gl.UNSIGNED_BYTE,p);return p.filter((v,i)=>i%4===3&&v>0).length;});
     assert(mobilePixels>1000,'Mobile idle canvas must be nonblank');
     await mobile.screenshot({ path: path.join(evidence, 'mobile-ready.png') });
+    await mobile.locator('#bonusMode').click();
+    await mobile.locator('#modeDialog [data-mode="prism"]').click();
+    await mobile.screenshot({ path: path.join(evidence, 'mobile-modal.png') });
+    assert.equal(await mobile.locator('#modeDialog').evaluate(el => el.scrollWidth <= el.clientWidth), true);
+    await mobile.locator('#confirmMode').click();
+    assert.equal(await mobile.locator('#bonusMode').getAttribute('data-mode'), 'prism');
+    await desktop.close(); await mobile.close();
     const replay = await pageFor({ width: 1280, height: 800 });
     const beforeReplay = calls.length;
     await replay.goto(url + '/?replay=true&game=stacks&version=1&mode=target_250&event=0&amount=1000000&rgs_url=rgs.test&currency=USD'); await waitReady(replay);
@@ -143,6 +159,7 @@ const { chromium } = require(playwrightPath);
     assert(calls.slice(beforeReplay).every(call => call.endpoint.startsWith('/bet/replay/')), 'Public replay must never call a wallet');
     assert.equal(await replay.locator('.play-button .action-label').textContent(), 'Play Again');
     assert.equal(await replay.locator('#bet').isDisabled(), true);
+    await replay.close();
     const missing = await pageFor({ width: 800, height: 600 });
     await missing.goto(url); await waitReady(missing);
     assert.equal(await missing.locator('.play-button').isDisabled(), true);

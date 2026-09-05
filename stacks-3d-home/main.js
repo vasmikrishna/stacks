@@ -80,8 +80,30 @@ const predictionPanel = steppers[1].parentElement;
 predictionPanel.classList.add('prediction-panel');
 $('.bottom-playbar').before(predictionPanel);
 const modePanel=document.createElement('section');
-modePanel.className='mode-panel';modePanel.setAttribute('aria-label','Game mode and payout');
-modePanel.innerHTML=`<div class="mode-options" role="group" aria-label="Game mode">${GAME_MODES.map(mode=>`<button type="button" data-mode="${mode.id}" aria-pressed="${mode.id==='classic'}"><i class="mode-symbol" aria-hidden="true"></i><span>${mode.label}</span><b>${mode.boost}x</b></button>`).join('')}</div><div class="mode-quote"><span>Total payout <strong id="modePayout"></strong></span><span>Win chance <strong id="modeOdds"></strong></span></div>`;
+modePanel.className='mode-panel';modePanel.setAttribute('aria-label','Payout quote');
+modePanel.innerHTML='<div class="mode-quote"><span>Total payout <strong id="modePayout"></strong></span><span>Win chance <strong id="modeOdds"></strong></span></div>';
+const modeDialog=document.createElement('dialog');
+modeDialog.id='modeDialog';modeDialog.setAttribute('aria-labelledby','modeDialogTitle');
+modeDialog.innerHTML=`<header><h2 id="modeDialogTitle">Choose your mode</h2><button type="button" class="mode-close" aria-label="Close mode selector" title="Close">×</button></header><div class="mode-options" role="group" aria-label="Game mode">${GAME_MODES.map(mode=>`<button type="button" data-mode="${mode.id}" aria-pressed="false"><span class="mode-art" aria-hidden="true"></span><span class="mode-check" aria-hidden="true">✓</span><span>${mode.label}</span><b>${mode.boost}x</b></button>`).join('')}</div><div class="mode-quote"><span>Total payout <strong id="modalPayout"></strong></span><span>Win chance <strong id="modalOdds"></strong></span></div><p class="mode-risk">Higher boosts have lower win chances.</p><button type="button" id="confirmMode">Use Classic</button>`;
+document.body.append(modeDialog);
+const bonusButton=document.createElement('button');
+bonusButton.type='button';bonusButton.id='bonusMode';bonusButton.setAttribute('aria-haspopup','dialog');bonusButton.setAttribute('aria-controls','modeDialog');
+bonusButton.innerHTML='<span class="mode-art" aria-hidden="true"></span><b aria-hidden="true">1x</b>';
+$('#turbo').before(bonusButton);
+let pendingMode='classic';
+const modeBlocked=()=>state.phase==='running'||state.auto||Boolean(state.replay)||Boolean(engine.enabled&&(engine.locked||engine.busy||engine.publicReplay||state.engineSettling));
+function refreshModeDialog(){
+ for(const button of modeDialog.querySelectorAll('[data-mode]'))button.setAttribute('aria-pressed',button.dataset.mode===pendingMode);
+ const units=boostedPayoutUnits(multiplierUnits(normalizePrediction(Number($('#prediction').value)||2.5)),pendingMode);
+ let amount='--';try{amount=money(Number(BigInt(apiAmount($('#bet').value))*BigInt(units)/100n)/10000);}catch{}
+ $('#modalPayout').textContent=`${amount} (${(units/100).toFixed(2)}x)`;
+ $('#modalOdds').textContent=(Number(samplesAtLeast(units))/Number(SAMPLE_COUNT)*100).toFixed(2)+'%';
+ $('#confirmMode').textContent='Use '+gameMode(pendingMode).label;
+}
+bonusButton.onclick=()=>{if(modeBlocked())return;pendingMode=state.modeId;refreshModeDialog();modeDialog.showModal();modeDialog.querySelector('[aria-pressed="true"]').focus();};
+modeDialog.querySelector('.mode-close').onclick=()=>modeDialog.close();
+modeDialog.addEventListener('click',event=>{if(event.target===modeDialog){const r=modeDialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)modeDialog.close();}});
+modeDialog.addEventListener('close',()=>bonusButton.focus());
 predictionPanel.before(modePanel);
 const action = $('.play-button');
 action.innerHTML='<img src="./assets/arcade/play.svg" alt=""><span class="action-label">Start Stack</span>';
@@ -376,10 +398,14 @@ $('#turbo').onclick=()=>{
  state.turbo=!state.turbo;
  update();
 };
-modePanel.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{
- if(state.phase==='running'||state.auto||state.replay||engine.enabled&&(engine.locked||engine.busy))return;
- state.modeId=button.dataset.mode;state.phase='idle';state.multiplier=1;state.predictionReached=false;clearCelebration();message.remove();stopGameplaySounds();resetDebris();rebuild(10);applyModeTheme();update();
-});
+modeDialog.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{pendingMode=button.dataset.mode;refreshModeDialog();});
+$('#confirmMode').onclick=()=>{
+ if(modeBlocked()){modeDialog.close();return;}
+ if(state.modeId!==pendingMode){
+ state.modeId=pendingMode;state.phase='idle';state.multiplier=1;state.bonus=0;state.payout=0;state.predictionReached=false;clearCelebration();message.remove();stopGameplaySounds();resetDebris();rebuild(10);applyModeTheme();update();
+ }
+ modeDialog.close();
+};
 document.addEventListener('input',event=>{if(['bet','target','prediction'].includes(event.target.id))updateModeQuote();});
 document.addEventListener('change',event=>{if(['bet','target','prediction'].includes(event.target.id))updateModeQuote();});
 steppers[0].addEventListener('click',updateModeQuote);
@@ -411,10 +437,11 @@ function update() {
  const turbo=$('#turbo'),turboLabel=`Turbo mode ${state.turbo?'on':'off'}: 2.5x faster round presentation`;
  turbo.setAttribute('aria-checked',state.turbo);turbo.setAttribute('aria-label',turboLabel);turbo.title=turboLabel;
  turbo.disabled=state.phase==='running'||state.auto||Boolean(state.replay);
- for(const button of modePanel.querySelectorAll('[data-mode]')){
-  button.setAttribute('aria-pressed',button.dataset.mode===state.modeId);
-  button.disabled=state.phase==='running'||state.auto||Boolean(state.replay)||engine.enabled&&(engine.locked||engine.busy||engine.publicReplay);
- }
+ bonusButton.disabled=modeBlocked();
+ bonusButton.dataset.mode=state.modeId;bonusButton.querySelector('b').textContent=gameMode(state.modeId).boost+'x';
+ bonusButton.title='Bonus mode: '+gameMode(state.modeId).label;
+ bonusButton.setAttribute('aria-label',bonusButton.title+' '+gameMode(state.modeId).boost+'x');
+ if(modeDialog.open&&modeBlocked())modeDialog.close();
  updateModeQuote();
  for(const input of document.querySelectorAll('.stepper input, .stepper button, .drawer-row input:not(#musicVolume), #reset')) input.disabled=state.phase==='running' || state.auto || Boolean(state.replay);
  if(engine.enabled){

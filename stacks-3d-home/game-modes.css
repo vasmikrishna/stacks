@@ -1,4 +1,4 @@
-.app { grid-template-rows: 64px minmax(220px,1fr) 70px 108px 100px; }
+.app { grid-template-rows: 64px minmax(220px,1fr) 30px 108px 100px; }
 .mode-panel { width: min(960px,100%); justify-self: center; align-self: center; padding: 0 16px; }
 .mode-options { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border-bottom: 1px solid #39454c; }
 .mode-options button { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; height: 35px; padding: 4px 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #98a7af; font-size: 15px; font-weight: 600; }
@@ -16,6 +16,50 @@
 .mode-quote { display: flex; justify-content: space-between; gap: 12px; min-height: 25px; padding-top: 5px; color: #a3b4bf; font-size: 12px; font-variant-numeric: tabular-nums; }
 .mode-quote strong { margin-left: 5px; color: #e7f3eb; font-weight: 600; overflow-wrap: anywhere; }
 .history-mode { display: block; color: #9cb1bf; font-size: 11px; }
+#modeDialog { box-sizing: border-box; width: min(620px,calc(100% - 28px)); max-height: calc(100dvh - 28px); overflow: auto; padding: 22px; color: #eef5f8; background: #111518; border: 1px solid #3a4246; border-radius: 8px; box-shadow: 0 20px 80px #0009; }
+#modeDialog::backdrop { background: #000b; }
+#modeDialog header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+#modeDialog h2 { margin: 0; font-size: 28px; font-weight: 600; }
+.mode-close { width: 40px; height: 40px; background: transparent; border: 0; color: #b9c4cc; font-size: 32px; }
+#modeDialog .mode-options { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; border: 0; }
+#modeDialog .mode-options button { position: relative; flex-direction: column; height: auto; gap: 0; padding: 6px 10px 12px; border: 1px solid #30383e; border-radius: 6px; font-size: 23px; background: #111518; }
+#modeDialog .mode-options button b { font-size: 21px; }
+#modeDialog .mode-options button[aria-pressed=true] { border-color: #74edc9; box-shadow: inset 0 0 0 1px #74edc9; }
+.mode-art { display: block; width: min(100%,164px); aspect-ratio: 1; flex-shrink: 0; background-image: url('./assets/arcade/bonus-modes.png'); background-size: 200% 200%; background-position: 0 0; }
+[data-mode=prism] > .mode-art { background-position: 100% 0; }
+[data-mode=tesseract] > .mode-art { background-position: 0 100%; }
+[data-mode=reactor] > .mode-art { background-position: 100% 100%; }
+.mode-check { display: none; position: absolute; right: 10px; top: 10px; width: 25px; height: 25px; border-radius: 50%; background: #74edc9; color: #08221b; font-size: 18px; }
+[aria-pressed=true] .mode-check { display: grid; place-items: center; }
+#modeDialog .mode-quote { margin-top: 16px; font-size: 15px; flex-wrap: wrap; }
+#modeDialog .mode-quote strong { color: #78e8d5; }
+.mode-risk { margin: 12px 0; text-align: center; color: #a0aeb6; font-size: 14px; }
+#confirmMode { width: 100%; min-height: 50px; background: #79e8c2; color: #07231c; border: 0; border-radius: 5px; font-size: 23px; font-weight: 600; }
+#modeDialog button:focus-visible, #bonusMode:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+#bonusMode { position: relative; width: 56px; height: 56px; padding: 3px; background: #111518; border: 1px solid #65dace; border-radius: 6px; }
+#bonusMode .mode-art { width: 100%; }
+#bonusMode b { position: absolute; top: -5px; right: -5px; padding: 1px 4px; color: #08151b; background: #87ecd2; border-radius: 4px; font-size: 12px; }
+#bonusMode:disabled { opacity: .45; }
+.bottom-playbar { grid-template-columns: minmax(190px,25%) minmax(180px,1fr) 60px 60px minmax(115px,15%) 56px; }
+@media(max-width:1000px) {
+ .bottom-playbar { grid-template-columns: minmax(150px,23%) minmax(130px,1fr) 48px 48px 100px 48px; }
+ #bonusMode { width: 44px; height: 44px; }
+}
+@media(max-width:700px) {
+ .bottom-playbar { grid-template-columns: minmax(110px,1fr) 40px 40px 44px 40px; gap: 5px; }
+ #bonusMode { grid-column: 2; grid-row: 1; width: 36px; height: 40px; }
+ .bottom-playbar .turbo-button { grid-column: 3; width: 36px; height: 40px; }
+ .bottom-playbar .autoplay-control { grid-column: 4; }
+ .bottom-playbar .autoplay-control label { display: none; }
+ .bottom-playbar .autoplay-copy { min-width: 0; }
+ .bottom-playbar #barSettings { grid-column: 5; width: 36px; }
+ #modeDialog { padding: 16px; }
+ #modeDialog h2 { font-size: 25px; }
+ #modeDialog .mode-art { max-width: 125px; }
+ #modeDialog .mode-options button { font-size: 20px; }
+ #modeDialog .mode-quote { font-size: 13px; }
+}
+@media(max-height:650px) { #modeDialog .mode-art { max-width: 90px; } }
 body[data-mode=prism] .stage { background: #102724; }
 body[data-mode=tesseract] .stage { background: #141027; }
 body[data-mode=reactor] .stage { background: #181e14; }
@@ -25,7 +69,7 @@ body[data-mode=tesseract] .stage-space { background-image: linear-gradient(#baa8
 body[data-mode=reactor] .stage-space { background-image: repeating-linear-gradient(0deg,transparent 0 56px,#c8f65c0a 57px 58px); }
 body.intro-active .mode-panel { visibility: hidden; }
 @media(max-width:700px) {
- .app { grid-template-rows: 60px minmax(200px,1fr) 78px 104px 154px; }
+ .app { grid-template-rows: 60px minmax(200px,1fr) 30px 104px 154px; }
  .mode-panel { padding: 0 8px; }
  .mode-options button { gap: 4px; padding: 3px 2px; font-size: 12px; height: 36px; }
  .mode-symbol { display: none; }
