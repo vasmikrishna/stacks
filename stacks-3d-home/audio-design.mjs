@@ -13,52 +13,19 @@ export function audioStage(multiplier) {
   return 0;
 }
 
-export function growthCue(multiplier, tick = 0) {
+export function growthCue(multiplier) {
   const value = validMultiplier(multiplier);
   const energy = Math.min(1, Math.log2(value) / Math.log2(100));
-  const stage = audioStage(value);
   return {
-    intervalMs: Math.round(128 - energy * 72),
-    coinCount: 2 + (stage >= 2 ? 1 : 0) + (stage >= 4 ? 1 : 0),
-    spreadMs: 18,
-    playbackRate: .94 + energy * .2,
-    volume: .038 + energy * .012,
-    pitchOffset: [1, 1.06, .96][tick % 3],
-    accent: tick % 4 === 3,
+    playbackRate: .92 + energy * .48,
+    volume: .1 + energy * .06,
   };
 }
 
 export function landingCue(index, multiplier) {
   const stage = audioStage(multiplier);
   return {
-    bodyFrequency: 138 + stage * 14 + (index % 3) * 7,
-    crystalFrequency: 430 + stage * 74 + (index % 5) * 18,
-    volume: .032 + stage * .003,
-  };
-}
-
-const CHORDS = [
-  [50, 57, 60, 64],
-  [48, 55, 59, 62],
-  [45, 52, 55, 59],
-  [43, 50, 57, 60],
-];
-const ARPEGGIO = [0, 2, 1, 3, 1, 2, 0, 3];
-
-export function musicEvent(step, multiplier) {
-  if (!Number.isInteger(step) || step < 0) throw new RangeError('Invalid music step');
-  const stage = audioStage(multiplier);
-  const bpm = 94 + stage * 12;
-  const beat = step % 8;
-  const chord = CHORDS[Math.floor(step / 8) % CHORDS.length];
-  return {
-    stage,
-    stepSeconds: 30 / bpm,
-    chord,
-    arpMidi: chord[ARPEGGIO[beat]] + 12 + (stage >= 3 && beat % 2 ? 12 : 0),
-    pad: beat === 0,
-    bass: beat % 2 === 0,
-    kick: beat % 4 === 0,
-    sparkle: stage >= 2 && beat % 2 === 1,
+    playbackRate: .93 + stage * .045 + (index % 3) * .025,
+    volume: .15 + stage * .015,
   };
 }

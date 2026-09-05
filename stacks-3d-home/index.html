@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>STACKS 3D Main Screen</title>
-    <link rel="stylesheet" href="./loading-screen.css?v=2" />
+    <link rel="stylesheet" href="./loading-screen.css?v=4" />
     <link rel="stylesheet" href="./intro-flow.css?v=1" />
     <style>
       :root {
@@ -500,6 +500,11 @@
 
       <section class="game" aria-label="STACKS game arena">
         <div class="stage">
+          <div class="stage-space" aria-hidden="true">
+            <i class="space-stars space-stars--far"></i>
+            <i class="space-stars space-stars--near"></i>
+            <i class="space-scan"></i>
+          </div>
           <div id="stack-scene"></div>
           <div class="arena-floor" aria-hidden="true"></div>
           <div class="stack-art" aria-hidden="true">
@@ -609,7 +614,7 @@
                 <div><strong>7.00x</strong><span>Super Stack</span><p>The tower builds at its fastest pace.</p></div>
                 <div><strong>25.00x</strong><span>Legendary</span><p>The highest celebration tier begins.</p></div>
               </div>
-              <p class="bonus-note">Bonus modes do not multiply the selected payout. Maximum target and displayed result: 1000x.</p>
+              <p class="bonus-note">Bonus modes do not multiply the selected payout. Selectable target range: 1.50x to 39x.</p>
             </section>
 
             <section class="game-info-panel history-panel" id="historyPanel" role="tabpanel" aria-labelledby="historyTab" hidden>
@@ -636,8 +641,8 @@
       </dialog>
     </main>
 
-    <script type="module" src="./main.js?v=21"></script>
-    <link rel="stylesheet" href="./game.css?v=4" />
+    <script type="module" src="./main.js?v=23"></script>
+    <link rel="stylesheet" href="./game.css?v=5" />
     <link rel="stylesheet" href="./arcade-console.css?v=4" />
     <link rel="stylesheet" href="./prediction-ruler.css?v=2" />
     <link rel="stylesheet" href="./win-celebration.css?v=2" />

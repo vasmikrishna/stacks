@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { predictionStops, predictionPosition, predictionValue, adjustPrediction } from './prediction-scale.mjs';
+import { predictionStops, predictionPosition, predictionValue, adjustPrediction, snapPrediction } from './prediction-scale.mjs';
 
 test('ruler stops line up with both target and live value', () => {
  for (const [value, position] of predictionStops) {
@@ -17,13 +17,15 @@ test('scale is monotonic and invertible across the full track', () => {
   previous = value;
  }
 });
-test('controls clamp bounds and preserve cent-sized multiplier increments', () => {
+test('controls clamp bounds and move smoothly by hundredths', () => {
  assert.equal(predictionPosition(0.73), 0);
- assert.equal(predictionValue(-10), 1.01);
- assert.equal(predictionValue(1200), 1000);
+ assert.equal(predictionValue(-10), 1.5);
+ assert.equal(predictionValue(1200), 39);
  assert.equal(adjustPrediction(2.50, 1), 2.51);
  assert.equal(adjustPrediction(2.50, -1), 2.49);
- assert.equal(adjustPrediction(1.01, -1), 1.01);
- assert.equal(adjustPrediction(1000, 1), 1000);
- assert.equal(adjustPrediction(NaN, 1), 1.02);
+ assert.equal(adjustPrediction(1.5, -1), 1.5);
+ assert.equal(adjustPrediction(39, 1), 39);
+ assert.equal(adjustPrediction(NaN, 1), 1.51);
+ assert.equal(snapPrediction(5.794), 5.79);
+ assert.equal(snapPrediction(17.436), 17.44);
 });

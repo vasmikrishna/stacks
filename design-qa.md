@@ -1,6 +1,28 @@
-# Adaptive Game Audio QA
+# Complete Recorded Audio Integration QA
 
 final result: passed
+
+- Every visible cube landing now drives the existing radial glow and a synchronized multi-direction platform impulse. Closely spaced landings accumulate slightly stronger vibration, then settle back to the exact platform origin within 420 ms.
+- The Motion control has been removed from Settings. Game animation remains enabled by default, while the operating system reduced-motion preference is still respected.
+- The startup sequence has two dedicated cues: a restrained four-second loading bed and a 1.38-second original crystal logo resolve. The bed yields to the resolve when the STACKS logo pulses, and both stop before the playable screen opens.
+- The loader remains automatic and uncluttered. When a browser blocks startup autoplay, the visual sequence continues without adding an entry gate or delaying access to the game.
+- Selected direction: Crystal Tension, using "Sci-Fi Game" by Arulo from Mixkit.
+- The licensed MP3 is served locally from `stacks-3d-home/assets/audio/crystal-tension.mp3`; the source and current license URL are recorded beside the asset.
+- The seven approved recorded effects are mapped to block landing, multiplier count, target reached, small win, big win, jackpot, and stack break. The Sound control remains independent from Background music.
+- The multiplier count loops only during an active round, accelerates with the multiplier, and ducks after the target is reached. Six pooled landing voices preserve overlapping impacts.
+- Standard and Stack wins use the small coin cue, Double and Super wins use the big coin cue, and only Legendary wins at 25x or higher use the jackpot cue.
+- Music starts only while a normal round or historical replay is running. Results ease it out over 950 ms beneath the win or break cue; immediate replay or autoplay reverses smoothly into a fade-in without restarting the track.
+- Music still stops immediately for mute, tab hiding, page exit, and replay cancellation.
+- Loss treatment uses Mixkit's two-second "Losing piano" cue at reduced volume instead of the harsh glitch failure sound. Loss music fades over 1.3 seconds, longer than the 950 ms win transition.
+- The existing Background music switch and Music volume slider control the track. Effects remain controlled by the separate Sound switch.
+- The complete build loaded at `http://127.0.0.1:4175/?audio=complete-fade`; a turbo standard-win round exercised the target, result, and fade transition without browser audio or media errors.
+- Fifteen Node tests and `git diff --check` pass. The full historical browser regression was not run; interaction checks used the Codex in-app browser.
+
+---
+
+# Adaptive Game Audio QA
+
+final result: superseded by Music 1 integration
 
 - Money growth feedback is now a falling-coin cascade rather than a single electronic tick. Main bursts are spaced approximately 128 ms apart near 1x and compress to 56 ms by 100x; each burst releases two to four separately sampled metallic impacts, staggered by 18 ms, pitch-varied, and panned across the stereo field.
 - The target-reached cue no longer creates a half-second dead spot in the money rhythm. Growth audio resumes on the next cadence interval.

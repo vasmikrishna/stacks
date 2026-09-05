@@ -15,3 +15,6 @@ coverage/
 .wrangler/
 stacks-3d-home/*.png
 stacks-3d-home/stacks-3d-home/
+output/
+stacks-3d-home/audio-auditions/
+varchas_games.png

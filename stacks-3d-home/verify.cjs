@@ -29,7 +29,7 @@ const assert = require('node:assert/strict');
     }
    };
    window.debrisAtRest=()=>blocks.filter(b=>b.visible).every(b=>b.userData.resting);
-   window.musicActive=()=>musicTimer!==undefined && musicBus!==null;
+   window.musicActive=()=>musicPlaying && !musicTrack.paused;
    window.testFullBreak=()=>{rebuild(28);state.phase='broken';startDebris();};
    window.testWin=(target)=>{state.target=target;state.phase='running';settle(true,100);};
    window.celebrationCount=()=>celebration.visible?confetti.filter(p=>p.visible).length:0;

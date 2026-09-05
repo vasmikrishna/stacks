@@ -125,13 +125,35 @@ export function stageEffects(scene, turntable) {
     mesh.rotation.x = -Math.PI / 2; mesh.position.y = -.439; mesh.visible = false; scene.add(mesh);
     return { mesh, age: 2, duration: 1, bonus: false };
   });
+  const impact = { age: 1, strength: 0 };
   let cursor = 0;
   return {
+    impact(strength = 1) {
+      impact.age = 0;
+      impact.strength = Math.min(1.55, impact.strength * .45 + strength);
+    },
     pulse(color, bonus = false) {
       const p = pulses[cursor++ % pulses.length]; p.age = 0; p.bonus = bonus; p.duration = bonus ? 1.5 : .85;
       p.mesh.material.color.set(color); p.mesh.visible = true;
     },
     update(dt, moving, color, bonus = 0, height = 3, running = false) {
+      impact.age += dt;
+      if (moving && impact.age < .42) {
+        const decay = Math.exp(-impact.age * 9.5) * impact.strength;
+        turntable.position.x = Math.sin(impact.age * 68) * .026 * decay;
+        turntable.position.y = -Math.abs(Math.sin(impact.age * 58)) * .07 * decay;
+        turntable.position.z = Math.sin(impact.age * 61) * .02 * decay;
+        turntable.rotation.x = Math.sin(impact.age * 54) * .006 * decay;
+        turntable.rotation.z = Math.sin(impact.age * 72) * .008 * decay;
+      } else {
+        const settle = moving ? Math.min(1, dt * 18) : 1;
+        turntable.position.x = THREE.MathUtils.lerp(turntable.position.x, 0, settle);
+        turntable.position.y = THREE.MathUtils.lerp(turntable.position.y, 0, settle);
+        turntable.position.z = THREE.MathUtils.lerp(turntable.position.z, 0, settle);
+        turntable.rotation.x = THREE.MathUtils.lerp(turntable.rotation.x, 0, settle);
+        turntable.rotation.z = THREE.MathUtils.lerp(turntable.rotation.z, 0, settle);
+        if (impact.age >= .42) impact.strength = 0;
+      }
       lowerRim.material.color.lerp(new THREE.Color(color), Math.min(1, dt * 4));
       bonusRings.visible = moving && running && bonus > 0;
       bonusRings.position.y = height * .48;

@@ -1,16 +1,19 @@
 import * as THREE from './vendor/three.module.js';
-import { lightCrystalStage, crystalMaterials, crystalDetails, stageEffects } from './crystal-stage.js?v=5';
+import { lightCrystalStage, crystalMaterials, crystalDetails, stageEffects } from './crystal-stage.js?v=6';
 import RAPIER from './vendor/rapier.es.js';
 await RAPIER.init();
 import { bonusStage, crashPoint, multiplierUnits, payout, resolveRound } from './math.mjs';
-import { predictionStops, predictionPosition, predictionValue, adjustPrediction } from './prediction-scale.mjs';
+import { predictionStops, predictionPosition, predictionValue, adjustPrediction, snapPrediction } from './prediction-scale.mjs?v=3';
 import { winTier, winTiming, displayedPayout, fountainParticle } from './win-timing.mjs?v=2';
 import { createRecentResults } from './recent-results.js';
 import { createReplaySnapshot, seededUnit } from './replay.mjs';
-import { growthCue, landingCue, musicEvent } from './audio-design.mjs';
+import { growthCue, landingCue } from './audio-design.mjs';
+import { apiAmount, amountText, targetMode } from './engine-contract.mjs?v=3';
+import { createEngineSession } from './engine-session.mjs';
 
 const $ = (s) => document.querySelector(s);
-const money = (n) => (n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const engine=createEngineSession(location.href,{required:document.querySelector('meta[name="stacks-runtime"]')?.content==='stake-engine'});
+const money = (n) => (n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: engine.enabled?6:2 });
 const random = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
 const loader=$('#gameLoader');
 let loaderDismissed=false;
@@ -29,35 +32,43 @@ function dismissLoader(){
   loader.setAttribute('aria-label','STACKS ready');
   loader.querySelector('.game-loader__status').textContent='Ready';
   loader.querySelector('[role="progressbar"]').setAttribute('aria-valuenow','100');
-  setTimeout(()=>{loader.classList.add('is-logo-reveal');playSplashChime();},1000);
+  setTimeout(()=>{loader.classList.add('is-logo-reveal');playSplashAudio();},1000);
   setTimeout(()=>loader.classList.add('is-complete'),1700);
-  setTimeout(()=>{loader.hidden=true;startIntroIfNeeded();},2300);
+  setTimeout(()=>{loader.hidden=true;stopIntroAudio();startIntroIfNeeded();},2300);
  };
  const fallback=setTimeout(release,4000);
  Promise.all([logoReady,fontsReady]).then(()=>{clearTimeout(fallback);release();});
 }
-const state = { balance: 1245000, phase: 'idle', multiplier: 1, bet: 0, auto: false, autoRound: 0, autoTotal: 0, remaining: 0, history: [], nextRoundId: 1, replay: null, replayRestore: null, visualSeed: 0, bonusTransitions: [], sound: true, music: true, musicVolume: .35, motion: true, turbo: false };
+const state = { balance: 1245000, phase: 'idle', multiplier: 1, bonus: 0, bet: 0, auto: false, autoRound: 0, autoTotal: 0, remaining: 0, history: [], nextRoundId: 1, replay: null, replayRestore: null, visualSeed: 0, bonusTransitions: [], sound: true, music: true, musicVolume: .35, motion: true, turbo: false };
+if(engine.enabled)state.balance=0;
+let engineReplaySnapshot=null;
+const engineNotice=document.createElement('div');
+engineNotice.className='engine-notice';engineNotice.hidden=true;engineNotice.setAttribute('role','status');
+const engineNoticeText=document.createElement('span'),engineReconnect=document.createElement('button');
+engineReconnect.type='button';engineReconnect.textContent='Reconnect';
+engineNotice.append(engineNoticeText,engineReconnect);$('.stage').append(engineNotice);
+engineReconnect.onclick=()=>bootstrapEngine();
 const steppers = document.querySelectorAll('.stepper');
 steppers[0].innerHTML = '<button aria-label="Halve bet" title="Halve bet"><img src="./assets/arcade/minus.svg" alt=""></button><input id="bet" class="value" type="number" aria-label="Bet amount" min="1" step="1" value="100.00"><button aria-label="Double bet" title="Double bet"><img src="./assets/arcade/plus.svg" alt=""></button>';
 steppers[1].classList.add('prediction-control');
 steppers[1].innerHTML = `
  <div class="prediction-number">
   <button id="predictionDown" aria-label="Decrease prediction" title="Decrease prediction by 0.01x"><img src="./assets/arcade/minus.svg" alt=""></button>
-  <label class="prediction-value"><input id="prediction" type="number" aria-label="Exact prediction multiplier" min="1.01" max="1000" step="0.01" value="2.50"><span aria-hidden="true">x</span></label>
+  <label class="prediction-value"><input id="prediction" type="number" aria-label="Exact prediction multiplier" min="1.50" max="39" step="0.01" value="2.50"><span aria-hidden="true">x</span></label>
   <button id="predictionUp" aria-label="Increase prediction" title="Increase prediction by 0.01x"><img src="./assets/arcade/plus.svg" alt=""></button>
  </div>
- <div class="prediction-track">
-  <input id="target" type="range" aria-label="Prediction multiplier" min="0" max="1000" step="1">
+  <div class="prediction-track">
+   <input id="target" type="range" aria-label="Prediction multiplier" min="0" max="1000" step="1">
   <div class="ruler-scale" aria-hidden="true">
    ${Array.from({length: 101}, (_, i) => `<i class="ruler-tick" style="left:${i}%"></i>`).join('')}
-   ${predictionStops.map(([value, position]) => `<span class="ruler-stop" style="left:${position / 10}%"><span>${value === 1.01 ? '1x' : value + 'x'}</span></span>`).join('')}
+   ${predictionStops.map(([value, position]) => `<span class="ruler-stop" style="left:${position / 10}%"><span>${value}x</span></span>`).join('')}
   </div>
   <div class="live-track" aria-hidden="true"><div class="live-fill"></div><i class="live-marker"></i></div>
   <output id="live-multiplier" aria-label="Live round multiplier">Live 1.00x</output>
  </div>`;
 function syncPredictionSlider() {
  const value=Number($('#prediction').value);
- if(!$('#prediction').value || !Number.isFinite(value) || value<1.01 || value>1000)return;
+ if(!$('#prediction').value || !Number.isFinite(value) || value<1.5 || value>39)return;
  $('#target').value=predictionPosition(value);
  $('#target').setAttribute('aria-valuetext',value.toFixed(2)+'x');
 }
@@ -114,11 +125,11 @@ function renderRoundHistory(){
  recentResults.render(resultValues());
 }
 function updateRulesMath(){
- const stake=Math.max(1,Number($('#bet').value)||100);
- const target=Math.min(1000,Math.max(1.01,Number($('#prediction').value)||2.5));
+ const stake=Math.max(engine.enabled?.000001:1,Number($('#bet').value)||100);
+ const target=Math.min(39,Math.max(1.5,Number($('#prediction').value)||2.5));
  const targetLabel=target.toFixed(2)+'x';
  for(const selector of ['#rulesTargetLabel','#rulesWinTarget','#rulesLossTarget'])$(selector).textContent=targetLabel;
- $('#rulesWinValue').textContent=money(payout(Math.round(stake*100),multiplierUnits(target)));
+ $('#rulesWinValue').textContent=engine.enabled?money(Number(BigInt(apiAmount(String(stake)))*BigInt(multiplierUnits(target))/100n)/10000):money(payout(Math.round(stake*100),multiplierUnits(target)));
  $('#rulesLossValue').textContent=stake.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function selectInfoPanel(name,focus=false){
@@ -149,7 +160,6 @@ $('.drawer-list').innerHTML = `
  <button class="drawer-row general-setting" id="sound" role="switch" aria-checked="true">Sound<span class="switch"></span></button>
  <button class="drawer-row general-setting" id="music" role="switch" aria-checked="true">Background music<span class="switch"></span></button>
  <label class="drawer-row general-setting">Music volume<input id="musicVolume" type="range" min="0" max="100" step="1" value="35" aria-label="Music volume"></label>
- <button class="drawer-row general-setting" id="motion" role="switch" aria-checked="true">Motion<span class="switch"></span></button>
  <label class="drawer-row autoplay-field autoplay-only">Autoplay rounds<input id="rounds" type="number" min="1" max="100" value="10"></label>
  <label class="drawer-row autoplay-field autoplay-only">Stop on profit<input id="profit" type="number" min="1" value="500"></label>
  <label class="drawer-row autoplay-field autoplay-only">Stop on loss<input id="loss" type="number" min="1" value="500"></label>
@@ -177,9 +187,54 @@ gameInfoDialog.addEventListener('click',event=>{if(event.target===gameInfoDialog
 gameInfoDialog.addEventListener('close',()=>gameInfoOrigin?.focus());
 
 let audio;
-let lastGrowthAt=0,lastGrowthUnits=100,growthTick=0;
-const growthVoices=new Set();
-let moneyCoinBuffer;
+function createEffect(filename,volume,{loop=false}={}){
+ const track=new Audio(`./assets/audio/${filename}`);
+ track.preload='auto';track.loop=loop;track.volume=volume;
+ track.dataset.baseVolume=String(volume);
+ return track;
+}
+function stopEffect(track,{reset=true}={}){
+ track.pause();
+ if(reset)try{track.currentTime=0;}catch{}
+}
+function playEffect(track,{volume=Number(track.dataset.baseVolume),playbackRate=1,restart=true}={}){
+ if(!state.sound||document.hidden)return;
+ if(restart)stopEffect(track);
+ track.volume=Math.min(1,Math.max(0,volume));
+ track.playbackRate=Math.min(2,Math.max(.5,playbackRate));
+ track.play().catch(()=>{});
+}
+const BOOT_VOLUME=.42,SPLASH_VOLUME=.52;
+const bootTrack=createEffect('boot-bed.mp3',BOOT_VOLUME);
+const splashTrack=createEffect('splash-reveal.mp3',SPLASH_VOLUME);
+const multiplierCountTrack=createEffect('multiplier-count.mp3',.12,{loop:true});
+const targetReachedTrack=createEffect('target-reached.mp3',.24);
+const stackBreakTrack=createEffect('stack-break.mp3',.16);
+const blockLandingTracks=Array.from({length:6},()=>createEffect('block-land.mp3',.16));
+const winTracks={
+ small:createEffect('win-small.mp3',.3),
+ big:createEffect('win-big.mp3',.34),
+ jackpot:createEffect('win-jackpot.mp3',.4),
+};
+const gameplayTracks=[multiplierCountTrack,targetReachedTrack,stackBreakTrack,...blockLandingTracks,...Object.values(winTracks)];
+function playIntroAudio(track,volume,cue){
+ if(!state.sound||document.hidden||loader?.hidden)return;
+ stopEffect(track);track.volume=volume;
+ loader.dataset.audioCue=cue;loader.dataset.audioState='starting';
+ track.play().then(()=>{loader.dataset.audioState='playing';}).catch(()=>{loader.dataset.audioState='blocked';});
+}
+function playBootAudio(){
+ stopEffect(splashTrack);playIntroAudio(bootTrack,BOOT_VOLUME,'boot');
+}
+function playSplashAudio(){
+ stopEffect(bootTrack);playIntroAudio(splashTrack,SPLASH_VOLUME,'splash');
+}
+function stopIntroAudio(){
+ stopEffect(bootTrack);stopEffect(splashTrack);
+ if(loader)loader.dataset.audioState='stopped';
+}
+playBootAudio();
+let lastGrowthAt=0;
 let predictionAnimations=[];
 function clearPredictionCue(){
  predictionAnimations.forEach(animation=>animation.cancel());predictionAnimations=[];
@@ -199,113 +254,63 @@ function predictionReached(now){
    {filter:'brightness(1)'},{filter:'brightness(2)',offset:.25},{filter:'brightness(1)'},
   ],{duration:600,easing:'ease-out'}));
  }
- if(!state.sound||!audio||audio.state!=='running')return;
- stopGrowthSound();lastGrowthAt=now;
- for(const [index,frequency] of [659.25,880].entries()){
-  const oscillator=audio.createOscillator(),gain=audio.createGain(),time=audio.currentTime+index*.12;
-  oscillator.frequency.value=frequency;
-  gain.gain.setValueAtTime(0,time);gain.gain.linearRampToValueAtTime(.025,time+.008);
-  gain.gain.exponentialRampToValueAtTime(.0001,time+.28);
-  oscillator.connect(gain);gain.connect(audio.destination);growthVoices.add(oscillator);
-  oscillator.onended=()=>{growthVoices.delete(oscillator);oscillator.disconnect();gain.disconnect();};
-  oscillator.start(time);oscillator.stop(time+.3);
- }
+ if(state.sound)playEffect(targetReachedTrack);
+ lastGrowthAt=now;
 }
 function stopGrowthSound(){
- for(const voice of growthVoices){try{voice.stop();}catch{}voice.disconnect();}
- growthVoices.clear();
-}
-function coinBuffer(){
- if(moneyCoinBuffer)return moneyCoinBuffer;
- const duration=.11,length=Math.ceil(audio.sampleRate*duration);
- moneyCoinBuffer=audio.createBuffer(1,length,audio.sampleRate);
- const channel=moneyCoinBuffer.getChannelData(0);
- for(let index=0;index<length;index++){
-  const time=index/audio.sampleRate,attack=Math.min(1,time/.0015),ring=Math.exp(-time*34),strike=Math.exp(-time*125);
-  const metal=Math.sin(Math.PI*2*1780*time)*.54+Math.sin(Math.PI*2*2637*time)*.31+Math.sin(Math.PI*2*4210*time)*.12;
-  channel[index]=attack*(metal*ring+(Math.random()*2-1)*strike*.09);
- }
- return moneyCoinBuffer;
-}
-function fallingCoin(time,playbackRate,pan,volume){
- const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();
- const panner=audio.createStereoPanner?.();
- source.buffer=coinBuffer();source.playbackRate.setValueAtTime(playbackRate,time);
- filter.type='highpass';filter.frequency.value=1050;filter.Q.value=.7;
- gain.gain.setValueAtTime(volume,time);gain.gain.exponentialRampToValueAtTime(.0001,time+.095);
- source.connect(filter);
- if(panner){filter.connect(panner);panner.pan.value=pan;panner.connect(gain);}else filter.connect(gain);
- gain.connect(audio.destination);growthVoices.add(source);
- source.onended=()=>{growthVoices.delete(source);source.disconnect();filter.disconnect();panner?.disconnect();gain.disconnect();};
- source.start(time);source.stop(time+.12);
+ stopEffect(multiplierCountTrack);
 }
 function growthSound(multiplier,now){
- if(state.phase!=='running'||!state.sound||document.hidden||!audio||audio.state!=='running')return;
- const units=multiplierUnits(multiplier);
- const cue=growthCue(multiplier,growthTick);
- if(units<=lastGrowthUnits||now-lastGrowthAt<cue.intervalMs)return;
- lastGrowthAt=now;lastGrowthUnits=units;
- growthTick++;
- // Each cadence emits a short stereo shower, so several separate coins strike in sequence.
- const rates=[1,.91,1.08,.97],start=audio.currentTime;
- for(let index=0;index<cue.coinCount;index++){
-  const pan=cue.coinCount===1?0:-.48+index/(cue.coinCount-1)*.96;
-  const rate=cue.playbackRate*cue.pitchOffset*rates[(growthTick+index)%rates.length];
-  fallingCoin(start+index*cue.spreadMs/1000,rate,pan,cue.volume*(cue.accent&&index===0?1.12:.82+index*.05));
- }
+ if(state.phase!=='running'||!state.sound||document.hidden)return;
+ if(now-lastGrowthAt<120&&!multiplierCountTrack.paused)return;
+ const cue=growthCue(multiplier);
+ lastGrowthAt=now;
+ multiplierCountTrack.volume=state.predictionReached?cue.volume*.72:cue.volume;
+ multiplierCountTrack.playbackRate=cue.playbackRate*(state.turbo?1.08:1);
+ if(multiplierCountTrack.paused)playEffect(multiplierCountTrack,{volume:multiplierCountTrack.volume,playbackRate:multiplierCountTrack.playbackRate,restart:false});
 }
-let musicTimer, musicBus, musicStarted=false, musicStep=0, nextMusicNote=0;
-const musicVoices=new Set();
-function musicNote(midi,when,duration,volume,type='sine',attack=.65){
- const oscillator=audio.createOscillator(), envelope=audio.createGain();
- oscillator.type=type;oscillator.frequency.value=440*2**((midi-69)/12);
- envelope.gain.setValueAtTime(0,when);
- envelope.gain.linearRampToValueAtTime(volume,when+attack);
- envelope.gain.exponentialRampToValueAtTime(.0001,when+duration);
- oscillator.connect(envelope);envelope.connect(musicBus);
- musicVoices.add(oscillator);
- oscillator.onended=()=>{musicVoices.delete(oscillator);oscillator.disconnect();envelope.disconnect();};
- oscillator.start(when);oscillator.stop(when+duration+.03);
+const MUSIC_VOLUME_SCALE=.45;
+const musicTrack=new Audio('./assets/audio/crystal-tension.mp3');
+musicTrack.loop=true;
+musicTrack.preload='auto';
+let musicStarted=false,musicPlaying=false,musicLevel=0,musicFadeFrame;
+function applyMusicVolume(){
+ musicTrack.volume=Math.max(0,Math.min(1,state.musicVolume*MUSIC_VOLUME_SCALE*musicLevel));
 }
-function musicKick(when,stage){
- const oscillator=audio.createOscillator(),envelope=audio.createGain();
- oscillator.type='sine';oscillator.frequency.setValueAtTime(94+stage*7,when);oscillator.frequency.exponentialRampToValueAtTime(42,when+.16);
- envelope.gain.setValueAtTime(.0001,when);envelope.gain.exponentialRampToValueAtTime(.16+stage*.012,when+.008);envelope.gain.exponentialRampToValueAtTime(.0001,when+.19);
- oscillator.connect(envelope);envelope.connect(musicBus);musicVoices.add(oscillator);
- oscillator.onended=()=>{musicVoices.delete(oscillator);oscillator.disconnect();envelope.disconnect();};
- oscillator.start(when);oscillator.stop(when+.21);
+function cancelMusicFade(){
+ cancelAnimationFrame(musicFadeFrame);musicFadeFrame=undefined;
+}
+function fadeMusicTo(level,duration,onComplete){
+ cancelMusicFade();
+ const from=musicLevel,start=performance.now();
+ const step=(now)=>{
+  const progress=Math.max(0,Math.min(1,(now-start)/duration));
+  const eased=1-(1-progress)**3;
+  musicLevel=from+(level-from)*eased;applyMusicVolume();
+  if(progress<1){musicFadeFrame=requestAnimationFrame(step);return;}
+  musicFadeFrame=undefined;onComplete?.();
+ };
+ musicFadeFrame=requestAnimationFrame(step);
 }
 function stopMusic(){
- clearInterval(musicTimer);musicTimer=undefined;
- for(const voice of musicVoices){try{voice.stop();}catch{}}
- musicVoices.clear();
- if(musicBus){musicBus.disconnect();musicBus=null;}
+ cancelMusicFade();musicLevel=0;applyMusicVolume();
+ musicPlaying=false;
+ musicTrack.pause();
+}
+function settleMusic(won){
+ if(!musicPlaying||musicTrack.paused)return;
+ fadeMusicTo(0,won?950:1300,()=>{musicPlaying=false;musicTrack.pause();});
 }
 function playMusic(){
  musicStarted=true;
- if(state.phase!=='running' || !state.music || document.hidden || musicTimer!==undefined)return;
- try {
-  audio ||= new (window.AudioContext || window.webkitAudioContext)();
-  audio.resume().catch(()=>{});
-  musicBus=audio.createGain();musicBus.gain.value=state.musicVolume*.18;musicBus.connect(audio.destination);
-  musicStep=0;
-  nextMusicNote=audio.currentTime+.05;
-  const schedule=()=>{
-   if(audio.state!=='running')return;
-   nextMusicNote=Math.max(nextMusicNote,audio.currentTime+.02);
-   while(nextMusicNote<audio.currentTime+.22){
-    const event=musicEvent(musicStep,state.multiplier);
-    if(event.pad)for(const note of event.chord)musicNote(note,nextMusicNote,event.stepSeconds*7.5,.055+event.stage*.003,'sine',.18);
-    if(event.bass)musicNote(event.chord[0]-12,nextMusicNote,event.stepSeconds*1.7,.13,'triangle',.012);
-    musicNote(event.arpMidi,nextMusicNote,event.stepSeconds*.72,.07+event.stage*.006,event.stage>=2?'triangle':'sine',.008);
-    if(event.sparkle)musicNote(event.arpMidi+7,nextMusicNote+.02,event.stepSeconds*.42,.027,'sine',.006);
-    if(event.kick)musicKick(nextMusicNote,event.stage);
-    musicStep=(musicStep+1)%32;nextMusicNote+=event.stepSeconds;
-   }
-  };
-  schedule();musicTimer=setInterval(schedule,75);
- } catch {stopMusic();}
+ if(state.phase!=='running'||!state.music||document.hidden)return;
+ const resume=musicTrack.paused;
+ cancelMusicFade();
+ if(resume){musicLevel=0;applyMusicVolume();musicPlaying=true;const start=musicTrack.play();start?.catch(()=>{musicPlaying=false;});}
+ fadeMusicTo(1,resume?650:350);
 }
+musicTrack.addEventListener('pause',()=>{musicPlaying=false;});
+musicTrack.addEventListener('error',()=>{musicPlaying=false;});
 $('#music').onclick=()=>{
  state.music=!state.music;
  $('#music').setAttribute('aria-checked',state.music);
@@ -314,78 +319,44 @@ $('#music').onclick=()=>{
 };
 $('#musicVolume').oninput=()=>{
  state.musicVolume=Number($('#musicVolume').value)/100;
- if(musicBus)musicBus.gain.setTargetAtTime(state.musicVolume*.18,audio.currentTime,.05);
+ applyMusicVolume();
 };
 document.addEventListener('visibilitychange',()=>{
- if(document.hidden){stopMusic();stopGrowthSound();stopLandingSounds();stopWinSound();}else if(musicStarted&&state.music)playMusic();
+ if(document.hidden){stopMusic();stopGameplaySounds();stopIntroAudio();}else if(musicStarted&&state.music)playMusic();
 });
 window.addEventListener('pagehide',stopMusic);
-window.addEventListener('pagehide',stopGrowthSound);
-window.addEventListener('pagehide',stopLandingSounds);
+window.addEventListener('pagehide',stopGameplaySounds);
+window.addEventListener('pagehide',stopIntroAudio);
 function tone(frequency = 420, duration = .1) {
  if (!state.sound) return;
  try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); const o=audio.createOscillator(), g=audio.createGain(); o.frequency.value=frequency; g.gain.setValueAtTime(.035,audio.currentTime); g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration); o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime+duration); } catch {}
 }
-function playSplashChime(){
- if(document.hidden||!state.sound)return;
- tone(659.25,.14);
- setTimeout(()=>tone(880,.22),140);
-}
-const winSoundVoices=new Set();
-const landingVoices=new Set();
+let landingTrackIndex=0;
 function stopLandingSounds(){
- for(const voice of landingVoices){try{voice.stop();}catch{}voice.disconnect();}
- landingVoices.clear();
+ blockLandingTracks.forEach(track=>stopEffect(track));
 }
 function blockLandingSound(index,multiplier){
- if(!state.sound||state.phase!=='running'||document.hidden||!audio||audio.state!=='running')return;
- const cue=landingCue(index,multiplier),time=audio.currentTime;
- for(const [type,start,finish,volume,duration] of [
-  ['triangle',cue.bodyFrequency,cue.bodyFrequency*.58,cue.volume,.13],
-  ['sine',cue.crystalFrequency,cue.crystalFrequency*1.08,cue.volume*.42,.085],
- ]){
-  const oscillator=audio.createOscillator(),gain=audio.createGain();
-  oscillator.type=type;oscillator.frequency.setValueAtTime(start,time);oscillator.frequency.exponentialRampToValueAtTime(finish,time+duration);
-  gain.gain.setValueAtTime(.0001,time);gain.gain.exponentialRampToValueAtTime(volume,time+.004);gain.gain.exponentialRampToValueAtTime(.0001,time+duration);
-  oscillator.connect(gain);gain.connect(audio.destination);landingVoices.add(oscillator);
-  oscillator.onended=()=>{landingVoices.delete(oscillator);oscillator.disconnect();gain.disconnect();};
-  oscillator.start(time);oscillator.stop(time+duration+.01);
- }
+ if(!state.sound||state.phase!=='running'||document.hidden)return;
+ const cue=landingCue(index,multiplier);
+ const track=blockLandingTracks[landingTrackIndex++%blockLandingTracks.length];
+ playEffect(track,{volume:cue.volume,playbackRate:cue.playbackRate});
 }
 function stopWinSound(){
- for(const voice of winSoundVoices){try{voice.stop();}catch{}voice.disconnect();}
- winSoundVoices.clear();
-}
-function winSoundNote(midi,delay,duration,volume,type='sine',finish=midi){
- const oscillator=audio.createOscillator(),gain=audio.createGain(),start=audio.currentTime+delay;
- oscillator.type=type;
- oscillator.frequency.setValueAtTime(440*2**((midi-69)/12),start);
- oscillator.frequency.exponentialRampToValueAtTime(440*2**((finish-69)/12),start+duration);
- gain.gain.setValueAtTime(.0001,start);
- gain.gain.exponentialRampToValueAtTime(volume,start+.018);
- gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
- oscillator.connect(gain);gain.connect(audio.destination);winSoundVoices.add(oscillator);
- oscillator.onended=()=>{winSoundVoices.delete(oscillator);oscillator.disconnect();gain.disconnect();};
- oscillator.start(start);oscillator.stop(start+duration+.02);
+ Object.values(winTracks).forEach(track=>stopEffect(track));
 }
 function playWinSound(target){
  if(!state.sound||document.hidden)return;
- try{
-  audio ||= new (window.AudioContext || window.webkitAudioContext)();
-  audio.resume().catch(()=>{});stopWinSound();
-  const {level}=winTier(target);
-  const profiles=[
-   [[76,0,.22,.026,'sine'],[83,.09,.3,.018,'sine']],
-   [[72,0,.3,.026,'sine'],[79,.11,.38,.025,'triangle'],[84,.23,.48,.018,'sine']],
-   [[60,0,.34,.02,'triangle'],[72,.04,.34,.025,'sine'],[76,.15,.4,.024,'sine'],[79,.27,.52,.021,'triangle']],
-   [[48,0,.5,.026,'triangle',55],[67,.07,.42,.025,'triangle'],[74,.2,.46,.025,'sine'],[79,.34,.55,.023,'sine'],[86,.48,.68,.018,'sine']],
-   [[43,0,.72,.032,'triangle',50],[67,.08,.65,.025,'triangle'],[72,.08,.7,.026,'triangle'],[76,.2,.75,.025,'sine'],[79,.35,.82,.024,'sine'],[84,.52,.95,.02,'sine'],[91,.7,1.05,.016,'sine']],
-  ];
-  for(const note of profiles[level])winSoundNote(...note);
- }catch{stopWinSound();}
+ stopWinSound();
+ const {level}=winTier(target);
+ playEffect(level>=4?winTracks.jackpot:level>=2?winTracks.big:winTracks.small);
 }
-window.addEventListener('pagehide',stopWinSound);
-for (const key of ['sound','motion']) $('#'+key).onclick = () => { state[key]=!state[key]; $('#'+key).setAttribute('aria-checked',state[key]); $('#'+key+' .switch').classList.toggle('off', !state[key]); if(key==='sound'&&!state.sound){stopGrowthSound();stopLandingSounds();stopWinSound();} if(key==='motion'&&!state.motion)clearPredictionCue(); };
+function stopGameplaySounds(){gameplayTracks.forEach(track=>stopEffect(track));}
+$('#sound').onclick=()=>{
+ state.sound=!state.sound;
+ $('#sound').setAttribute('aria-checked',state.sound);
+ $('#sound .switch').classList.toggle('off',!state.sound);
+ if(!state.sound)stopGameplaySounds();
+};
 $('#turbo').onclick=()=>{
  if(state.phase==='running'||state.auto)return;
  state.turbo=!state.turbo;
@@ -394,6 +365,7 @@ $('#turbo').onclick=()=>{
 function update() {
  const tier=state.phase==='won'?winTier(state.target):null;
  $('.stage').dataset.win=tier?.id||'';
+ $('.stage').dataset.phase=state.phase;
  message.classList.toggle('win-message',state.phase==='won');
  $('.balance strong').textContent=money(state.balance);
  $('.multiplier').textContent=(multiplierUnits(state.multiplier)/100).toFixed(2)+'x';
@@ -418,10 +390,29 @@ function update() {
  turbo.setAttribute('aria-checked',state.turbo);turbo.setAttribute('aria-label',turboLabel);turbo.title=turboLabel;
  turbo.disabled=state.phase==='running'||state.auto||Boolean(state.replay);
  for(const input of document.querySelectorAll('.stepper input, .stepper button, .drawer-row input:not(#musicVolume), #reset')) input.disabled=state.phase==='running' || state.auto || Boolean(state.replay);
+ if(engine.enabled){
+  const blocked=engine.locked||engine.busy||state.engineSettling;
+  for(const input of document.querySelectorAll('.stepper input, .stepper button, .drawer-row input:not(#musicVolume)'))input.disabled ||= Boolean(blocked||engine.publicReplay);
+  action.disabled ||= Boolean(blocked);
+  auto.disabled ||= Boolean(engine.publicReplay||engine.locked||(!state.auto&&engine.busy)||engine.config?.jurisdiction?.disabledAutoplay);
+  turbo.disabled ||= Boolean(blocked||engine.publicReplay||engine.config?.jurisdiction?.disabledTurbo);
+  $('#reset').hidden=true;
+  if(engine.publicReplay){
+   action.disabled=!engineReplaySnapshot||state.phase==='running';
+   action.querySelector('.action-label').textContent=state.phase==='running'?'Replaying':state.replay?'Play Again':'Play Replay';
+   auto.parentElement.hidden=true;$('.balance').hidden=true;
+  }else if(engine.busy||state.engineSettling)action.querySelector('.action-label').textContent=state.engineSettling?'Confirming result':'Connecting';
+ }
  replayStatus.hidden=!state.replay;
  if(state.replay)replayStatus.querySelector('strong').textContent=`Replay · Round #${state.replay.roundId}`;
 }
 steppers[0].querySelectorAll('button').forEach((button, index)=>button.onclick=()=>{
+ if(engine.enabled){
+  if(!engine.config)return;
+  const levels=engine.config.betLevels,current=Number($('#bet').value)*1000000;
+  const value=index?(levels.find(value=>value>current)??levels.at(-1)):([...levels].reverse().find(value=>value<current)??levels[0]);
+  $('#bet').value=amountText(value);return;
+ }
  const input=$('#bet'), value=Number(input.value)||Number(input.min);
  input.value=Math.min(100000,Math.max(1,index?value*2:value/2)).toFixed(2);
 });
@@ -434,14 +425,14 @@ $('#predictionDown').onclick=()=>nudgePrediction(-1);
 $('#predictionUp').onclick=()=>nudgePrediction(1);
 $('#target').oninput=()=>{
  const position=Number($('#target').value);
- const value=predictionValue(position);
+ const value=snapPrediction(predictionValue(position));
  $('#prediction').value=value.toFixed(2);
  $('#prediction').setCustomValidity('');
  $('#target').setAttribute('aria-valuetext',value.toFixed(2)+'x');
 };
 $('#prediction').oninput=syncPredictionSlider;
 $('#prediction').onchange=()=>{
- if($('#prediction').value && $('#prediction').validity.valid)$('#prediction').value=Number($('#prediction').value).toFixed(2);
+ if($('#prediction').value && $('#prediction').validity.valid)$('#prediction').value=snapPrediction(Number($('#prediction').value)).toFixed(2);
  syncPredictionSlider();
 };
 $('#target').onkeydown=e=>{
@@ -593,7 +584,7 @@ function startDebris(){
    .setLinearDamping(.5).setAngularDamping(.8).setCcdEnabled(true));
   const half=geo.boundingBox.getSize(new THREE.Vector3()).multiplyScalar(.5);
   // A small collision margin keeps solver tolerance outside the visible cube.
-  block.userData.collider=debrisWorld.createCollider(RAPIER.ColliderDesc.cuboid(half.x+.02,half.y+.02,half.z+.02)
+  block.userData.collider=debrisWorld.createCollider(RAPIER.ColliderDesc.cuboid(half.x+.02,half.y+.032,half.z+.02)
    .setFriction(.8).setRestitution(.15),body);
   block.userData.body=body;
  }
@@ -702,7 +693,7 @@ function rememberIntro(){
 }
 function introMath(){
  const stake=Math.max(1,Number($('#bet').value)||100);
- const target=Math.min(1000,Math.max(1.01,Number($('#prediction').value)||2.5));
+ const target=Math.min(39,Math.max(1.5,Number($('#prediction').value)||2.5));
  const possible=payout(Math.round(stake*100),multiplierUnits(target));
  $('#introPossibleWin').textContent=money(possible);
  $('#introTargetLabel').textContent=target.toFixed(2)+'x';
@@ -742,6 +733,7 @@ function closeIntro(){
  clearCelebration();rebuild(10);update();action.focus();tone(720,.12);
 }
 function startIntroIfNeeded(){
+ if(engine.publicReplay)return;
  const forced=new URLSearchParams(location.search).get('intro')==='1';
  if(forced||!hasSeenIntro())showIntro();
 }
@@ -760,14 +752,20 @@ document.addEventListener('keydown',event=>{
   introFlow.querySelector('[data-intro-screen]:not([hidden]) .intro-primary')?.click();
  }
 });
+function lockPrediction(){
+ const value=snapPrediction(Number($('#prediction').value));
+ $('#prediction').value=value.toFixed(2);syncPredictionSlider();
+ return value;
+}
 function start(){
  if(state.phase==='running'||state.replay)return;
+ if(engine.enabled){startEngineRound();return;}
  $('#settingsDrawer').classList.remove('open','autoplay-open');
  if(gameInfoDialog.open)gameInfoDialog.close();
  clearTimeout(nextRound);
- const bet=Math.round(Number($('#bet').value)*100), target=multiplierUnits(Number($('#prediction').value))/100;
+ const bet=Math.round(Number($('#bet').value)*100), target=lockPrediction();
  if(!Number.isFinite(bet)||bet<100||bet>state.balance){state.auto=false;update();reportInputError('#bet','Enter a valid stake within your balance.');return;}
- if(!Number.isFinite(target)||target<1.01||target>1000){state.auto=false;update();reportInputError('#prediction','Prediction must be between 1.01x and 1000x.');return;}
+ if(!Number.isFinite(target)||target<1.5||target>39){state.auto=false;update();reportInputError('#prediction','Prediction must be between 1.50x and 39x.');return;}
  if(state.auto&&!state.remaining){
   const rounds=Number($('#rounds').value),profit=Number($('#profit').value),loss=Number($('#loss').value);
   if(!Number.isInteger(rounds)||rounds<1||rounds>100||!Number.isFinite(profit)||profit<=0||!Number.isFinite(loss)||loss<=0){state.auto=false;update();$('#settingsDrawer').classList.add('open');reportInputError('#rounds','Set valid autoplay rounds and limits.');return;}
@@ -775,36 +773,36 @@ function start(){
  }
  if(state.auto)state.autoRound=state.autoTotal-state.remaining+1;
  state.bet=bet;state.target=target;state.balance-=bet;state.payout=0;state.multiplier=1;state.roundId=state.nextRoundId++;
- clearCelebration();stopWinSound();
+ clearCelebration();stopGameplaySounds();
  // Local demo outcome. Production must obtain the outcome and payout from Stake.
  state.breakAt=crashPoint(crypto.getRandomValues(new Uint32Array(1))[0]);
  state.visualSeed=crypto.getRandomValues(new Uint32Array(1))[0];state.bonusTransitions=[];
  state.started=performance.now();state.speed=state.turbo? .36:.14;state.phase='running';state.bonus=0;
  clearPredictionCue();state.predictionReached=false;
- stopGrowthSound();stopLandingSounds();lastGrowthAt=state.started;lastGrowthUnits=100;growthTick=0;
+ stopGameplaySounds();lastGrowthAt=state.started;
  playMusic();
  message.remove();rebuild(1);message.classList.remove('broken');tone(300);tick(state.started);update();
 }
 function startReplay(round){
  if(state.phase==='running'||state.auto||state.replay)return;
- const replay=createReplaySnapshot(round);
+ const replay=round.engine?round:createReplaySnapshot(round);
  state.replayRestore={bet:$('#bet').value,prediction:$('#prediction').value,turbo:state.turbo};
  state.replay=replay;
  $('#settingsDrawer').classList.remove('open','autoplay-open');
  if(gameInfoDialog.open)gameInfoDialog.close();
- clearTimeout(nextRound);clearCelebration();stopWinSound();resetDebris();
- $('#bet').value=(replay.betCents/100).toFixed(2);
+ clearTimeout(nextRound);clearCelebration();stopGameplaySounds();resetDebris();
+ $('#bet').value=replay.engine?amountText(replay.engine.amount):(replay.betCents/100).toFixed(2);
  $('#prediction').value=(replay.targetUnits/100).toFixed(2);syncPredictionSlider();
  state.bet=replay.betCents;state.target=replay.targetUnits/100;state.breakAt=replay.resultUnits/100;
  state.payout=0;state.multiplier=1;state.turbo=replay.turbo;state.visualSeed=replay.visualSeed;state.bonusTransitions=[];
  state.started=performance.now();state.speed=state.turbo ? .36 : .14;state.phase='running';state.bonus=0;
  clearPredictionCue();state.predictionReached=false;
- stopGrowthSound();stopLandingSounds();lastGrowthAt=state.started;lastGrowthUnits=100;growthTick=0;
+ stopGameplaySounds();lastGrowthAt=state.started;
  playMusic();message.remove();message.classList.remove('broken','replay-loss');rebuild(1);tone(300);tick(state.started);renderDialogHistory();update();
 }
 function finishReplay(){
  if(!state.replay)return;
- stopMusic();stopGrowthSound();stopLandingSounds();stopWinSound();clearPredictionCue();clearCelebration();resetDebris();
+ stopMusic();stopGameplaySounds();clearPredictionCue();clearCelebration();resetDebris();
  const restore=state.replayRestore;
  state.replay=null;state.replayRestore=null;state.phase='idle';state.multiplier=1;state.bonus=0;state.payout=0;state.predictionReached=false;state.breakDelay=0;
  message.remove();message.classList.remove('broken','win-message','replay-loss','long-payout');
@@ -813,12 +811,17 @@ function finishReplay(){
 }
 function settle(won, at){
  if(state.phase!=='running')return;
- stopMusic();
- stopGrowthSound();
- stopLandingSounds();
+ if(engine.enabled&&!state.replay&&!state.engineSettled){
+  if(state.engineSettling)return;
+  state.engineSettling=true;update();
+  engine.finish().then(balance=>{state.balance=balance/10000;state.engineSettled=true;state.engineSettling=false;settle(won,at);}).catch(showEngineError);
+  return;
+ }
+ settleMusic(won);
+ stopGameplaySounds();
  clearPredictionCue();state.predictionReached=won;
  const effectiveUnits=multiplierUnits(state.target);
- state.phase=won?'won':'broken';state.multiplier=at;state.bonus=bonusStage(at).level;state.payout=state.replay?state.replay.payoutCents:won?payout(state.bet,effectiveUnits):0;if(!state.replay)state.balance+=state.payout;state.ended=performance.now();
+ state.phase=won?'won':'broken';state.multiplier=at;state.bonus=bonusStage(at).level;state.payout=state.replay?state.replay.payoutCents:engine.enabled?engine.round.payout/10000:won?payout(state.bet,effectiveUnits):0;if(!state.replay&&!engine.enabled)state.balance+=state.payout;state.ended=performance.now();
  if(won){state.winRotationFrom=turntable.rotation.y;state.winRotationTo=Math.round(turntable.rotation.y/Math.PI)*Math.PI;}
  if(!won){state.breakDelay=0;if(!state.motion||reducedMotion.matches)startDebris();}
  message.classList.toggle('broken',!won);
@@ -830,10 +833,11 @@ function settle(won, at){
   $('.stage').append(message);
   celebrateWin();playWinSound(state.target);
  }
- if(!won){tone(120,.3);if(state.replay){message.classList.add('replay-loss');message.innerHTML=`<strong>STACK BROKE</strong><span class="replay-detail">Round #${state.replay.roundId} · Result ${(state.replay.resultUnits/100).toFixed(2)}x before target ${(state.replay.targetUnits/100).toFixed(2)}x</span>`;$('.stage').append(message);}}
+ if(!won){playEffect(stackBreakTrack);if(state.replay){message.classList.add('replay-loss');message.innerHTML=`<strong>STACK BROKE</strong><span class="replay-detail">Round #${state.replay.roundId} · Result ${(state.replay.resultUnits/100).toFixed(2)}x before target ${(state.replay.targetUnits/100).toFixed(2)}x</span>`;$('.stage').append(message);}}
  if(!state.replay){
-  const snapshot=createReplaySnapshot({roundId:state.roundId,betCents:state.bet,targetUnits:effectiveUnits,resultUnits:multiplierUnits(at),payoutCents:state.payout,won,visualSeed:state.visualSeed,turbo:state.turbo,bonusTransitions:state.bonusTransitions});
+  const snapshot=engine.enabled?engineSnapshot(engine.round):createReplaySnapshot({roundId:state.roundId,betCents:state.bet,targetUnits:effectiveUnits,resultUnits:multiplierUnits(at),payoutCents:state.payout,won,visualSeed:state.visualSeed,turbo:state.turbo,bonusTransitions:state.bonusTransitions});
   state.history.unshift(snapshot);state.history=state.history.slice(0,30);renderRoundHistory();
+  if(engine.enabled)engine.round=null;
  }
  if(state.auto&&!state.replay){state.remaining--;const delta=state.balance-state.autoStart;if(state.remaining<=0||delta>=state.profit||delta<=-state.loss||state.balance<state.bet){state.auto=false;state.autoRound=0;state.autoTotal=0;}else nextRound=setTimeout(start,won?winTiming(state.target).duration+400:1800);}
  if(state.replay)renderDialogHistory();
@@ -862,7 +866,69 @@ function tick(now){
  if(bonus!==state.bonus){state.bonus=bonus;if(bonus>0)state.bonusTransitions.push({level:bonus,atUnits:multiplierUnits(next)});effects.pulse([0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][bonus],true);tone(880,.2);}
  update();
 }
-action.onclick=()=>state.replay?finishReplay():start();
+action.onclick=()=>{
+ if(engine.publicReplay){if(state.phase==='running'||!engineReplaySnapshot)return;if(state.replay)finishReplay();startReplay(engineReplaySnapshot);return;}
+ state.replay?finishReplay():start();
+};
+
+function showEngineError(error){
+ state.auto=false;clearTimeout(nextRound);engine.locked=true;
+ engineNoticeText.textContent=error.message||'The game connection needs to be restored.';
+ engineReconnect.hidden=false;engineNotice.hidden=false;update();
+}
+
+function engineSnapshot(round){
+ return Object.freeze({version:1,roundId:state.roundId||1,betCents:round.amount/10000,targetUnits:round.outcome.targetUnits,resultUnits:round.outcome.resultUnits,payoutCents:round.payout/10000,won:round.payout>0,visualSeed:round.outcome.visualSeed,turbo:state.turbo,bonusTransitions:[],engine:round});
+}
+
+function revealEngineRound(round){
+ clearTimeout(nextRound);clearCelebration();stopGameplaySounds();resetDebris();
+ state.replay=null;state.bet=round.amount/10000;state.target=round.outcome.targetUnits/100;state.balance=engine.balance/10000;
+ state.payout=0;state.multiplier=1;state.roundId=state.nextRoundId++;state.breakAt=round.outcome.resultUnits/100;
+ state.visualSeed=round.outcome.visualSeed;state.bonusTransitions=[];state.engineSettled=false;state.engineSettling=false;
+ $('#bet').value=amountText(round.amount);$('#prediction').value=state.target.toFixed(2);syncPredictionSlider();
+ state.started=performance.now();state.speed=state.turbo?.36:.14;state.phase='running';state.bonus=0;
+ clearPredictionCue();state.predictionReached=false;lastGrowthAt=state.started;
+ playMusic();message.remove();message.classList.remove('broken','replay-loss');rebuild(1);tone(300);tick(state.started);update();
+}
+
+async function startEngineRound(){
+ if(engine.locked||engine.busy||state.phase==='running'||state.replay||engine.publicReplay)return;
+ $('#settingsDrawer').classList.remove('open','autoplay-open');if(gameInfoDialog.open)gameInfoDialog.close();
+ const target=multiplierUnits(lockPrediction());
+ try{targetMode(target);engine.validateAmount($('#bet').value);}catch(error){state.auto=false;update();reportInputError(target<101||target>100000?'#prediction':'#bet',error.message);return;}
+ if(state.auto&&!state.remaining){
+  const rounds=Number($('#rounds').value),profit=Number($('#profit').value),loss=Number($('#loss').value);
+  if(!Number.isInteger(rounds)||rounds<1||rounds>100||!Number.isFinite(profit)||profit<=0||!Number.isFinite(loss)||loss<=0){state.auto=false;update();reportInputError('#rounds','Set valid autoplay rounds and limits.');return;}
+  state.remaining=rounds;state.autoTotal=rounds;state.autoStart=engine.balance/10000;state.profit=profit*100;state.loss=loss*100;
+ }
+ if(state.auto)state.autoRound=state.autoTotal-state.remaining+1;
+ try{const pending=engine.play($('#bet').value,target);update();revealEngineRound(await pending);}catch(error){showEngineError(error);}
+}
+
+async function bootstrapEngine(){
+ if(!engine.enabled||engine.busy)return;
+ engineNotice.hidden=true;engineReconnect.hidden=true;engine.locked=true;state.auto=false;clearTimeout(nextRound);update();
+ try{
+  if(engine.publicReplay){
+   engineReplaySnapshot=engineSnapshot(await engine.loadReplay());
+   $('#bet').value=amountText(engineReplaySnapshot.engine.amount);$('#prediction').value=(engineReplaySnapshot.targetUnits/100).toFixed(2);syncPredictionSlider();
+  }else{
+   const resumed=await engine.authenticate();
+   state.balance=engine.balance/10000;state.engineSettling=false;
+   const config=engine.config,input=$('#bet');
+   input.min=amountText(config.minBet);input.max=amountText(config.maxBet);input.step=amountText(config.stepBet);
+   input.value=amountText(config.defaultBetLevel&&config.betLevels.includes(config.defaultBetLevel)?config.defaultBetLevel:config.betLevels[0]);
+   let list=$('#engineBetLevels');if(!list){list=document.createElement('datalist');list.id='engineBetLevels';input.after(list);input.setAttribute('list',list.id);}
+   list.replaceChildren(...config.betLevels.map(value=>{const option=document.createElement('option');option.value=amountText(value);return option;}));
+   $('.balance span').textContent=`BALANCE ${engine.currency}`;
+   if(config.jurisdiction?.disabledTurbo)state.turbo=false;
+   state.phase='idle';
+   if(resumed)revealEngineRound(resumed);
+  }
+  update();
+ }catch(error){showEngineError(error);}
+}
 let last=performance.now();
 function animate(now){
  const dt=Math.min((now-last)/1000,.05);last=now;tick(now);
@@ -905,7 +971,11 @@ function animate(now){
    let offset=t<.36?1.8*(1-(t/.36)**2):t<.66?Math.sin((t-.36)/.3*Math.PI)*.14:0;
    b.position.y=b.userData.y+(moving?offset:0);
    b.position.x=moving?THREE.MathUtils.lerp(b.position.x,b.userData.x,Math.min(1,dt*12)):b.userData.x;
-   if(b.visible&&moving&&oldAge<.36&&t>=.36){effects.pulse(b.material.color);blockLandingSound(i,state.multiplier);}
+   if(b.visible&&moving&&oldAge<.36&&t>=.36){
+    effects.pulse(b.material.color);
+    effects.impact(.82+Math.min(.36,state.bonus*.09));
+    blockLandingSound(i,state.multiplier);
+   }
    b.scale.setScalar(1);
   }
  });
@@ -944,3 +1014,4 @@ function animate(now){
  renderer.render(scene,camera);dismissLoader();requestAnimationFrame(animate);
 }
 renderRoundHistory();rebuild(10);update();requestAnimationFrame(animate);
+if(engine.enabled)bootstrapEngine();

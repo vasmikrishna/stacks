@@ -1,0 +1,18 @@
+VARCHAS GAMES publisher logo v1
+
+Created with the built-in image generation tool.
+Output: varchas-games-logo-v1.png, 1989 x 790 pixels.
+The generated PNG has an opaque black background; it is a logo proof, not a transparent export.
+Reference: user-provided publisher-logo screenshot, used for style and scale only.
+
+Generation prompt
+
+Use case: logo-brand.
+Create one finished, original logo for the global game developer VARCHAS GAMES.
+The attached screenshot is a STYLE AND USAGE REFERENCE ONLY: monochrome white game-publisher logos shown in compact horizontal tiles. Do not reproduce the screenshot, other brands, website UI, player counts, or a tile container. Do not copy any existing brand's emblem or letterforms.
+Deliverable: a single high-resolution production logo, horizontal lockup, isolated on a genuinely transparent background (alpha). Solid white artwork only; clean flat vector-like edges even though output is raster. No gray background, no visible checkerboard baked into the artwork.
+Design direction: confident, contemporary, distinctive, extremely legible at small size. A compact original angular V symbol at the left, made of two clean broad strokes with a subtle negative-space ray to suggest brilliance and dimension. Not a crown, shield, star, flame, cube stack, or esports badge. To its right, VARCHAS in bold, beautifully drawn uppercase geometric sans-serif lettering; strong open counters, careful optical kerning, no hairlines or decorative cuts through the letters. GAMES on a smaller subordinate second line below VARCHAS, balanced and comfortably legible. The overall silhouette is compact and horizontal, suitable for a 292 by 116 px publisher tile and for a game boot-screen credit. White V emblem and white typography. Make this feel like a mature international game studio rather than a sci-fi game title.
+Exact text, spelled correctly: "VARCHAS" and "GAMES". No tagline for this compact logo version.
+Composition: only ONE logo centered with modest transparent margins, complete emblem and all letters fully visible. Large usable logo occupying most of the canvas width, about 3.2:1 overall lockup proportions.
+Avoid mockups, 3D rendering, bevels, metallic textures, gradients, shadows, neon glows, tiny details, ornamental frames, multiple alternatives, captions or presentation labels.
+
