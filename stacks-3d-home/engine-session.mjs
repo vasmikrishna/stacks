@@ -1,4 +1,4 @@
-import { apiAmount, decodeOutcome, targetMode } from './engine-contract.mjs';
+import { apiAmount, decodeOutcome, modeCost, secondChanceMode, targetMode } from './engine-contract.mjs';
 
 function integer(value, label, minimum = 0) {
   if (!Number.isSafeInteger(value) || value < minimum) throw new Error(`Invalid ${label} from the server.`);
@@ -78,21 +78,22 @@ export function createEngineSession(href, { required = false, fetcher = globalTh
     } finally { session.busy = false; }
   };
 
-  session.validateAmount = text => {
+  session.validateAmount = (text, cost = 1) => {
     const amount = apiAmount(text), config = session.config;
     if (!config || amount < config.minBet || amount > config.maxBet || amount % config.stepBet !== 0) throw new RangeError('Choose an allowed play amount within the server limits.');
-    if (amount > session.balance) throw new RangeError('The play amount exceeds your balance.');
+    if (amount * cost > session.balance) throw new RangeError('The total play cost exceeds your balance.');
     return amount;
   };
 
-  session.play = async (text, targetUnits) => {
+  session.play = async (text, targetUnits, { secondChance = false } = {}) => {
     if (publicReplay || session.locked || session.busy || session.round) throw new Error('This session is not ready for a new round.');
-    const amount = session.validateAmount(text), mode = targetMode(targetUnits);
+    const mode = secondChance ? secondChanceMode(targetUnits) : targetMode(targetUnits);
+    const amount = session.validateAmount(text, modeCost(mode));
     session.busy = true;
     try {
       const response = await request('/wallet/play', { ...authBody(), amount, mode });
       wallet(response.balance);
-      if (response.round?.mode !== mode) throw new Error('The server returned a different target.');
+      if (response.round?.mode !== mode) throw new Error('The server returned a different game mode.');
       session.round = roundData(response.round, amount);
       return session.round;
     } catch (error) { session.locked = true; throw error; }
@@ -125,7 +126,7 @@ export function createEngineSession(href, { required = false, fetcher = globalTh
       const response = await request('/bet/replay/' + parts.join('/'));
       const outcome = decodeOutcome(response.state, params.get('mode'));
       const amount = params.has('amount') ? integer(Number(params.get('amount')), 'replay amount', 1) : 1000000;
-      if (response.costMultiplier !== 1 || response.payoutMultiplier !== outcome.payoutUnits / 100) throw new Error('Replay payout does not match the recorded target.');
+      if (response.costMultiplier !== outcome.cost || response.payoutMultiplier !== outcome.payoutUnits / 100) throw new Error('Replay payout does not match the recorded mode.');
       const payout = BigInt(amount) * BigInt(outcome.payoutUnits) / 100n;
       if (payout > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Replay amount is too large.');
       session.currency = /^[A-Z0-9]{2,10}$/.test(params.get('currency') || '') ? params.get('currency') : '';

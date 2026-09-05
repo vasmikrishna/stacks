@@ -20,6 +20,8 @@ test('replay snapshots preserve the complete historical round', () => {
     won: true,
     visualSeed: 912345,
     turbo: true,
+    secondChance: false,
+    attempts: [421],
     bonusTransitions: [{ level: 1, atUnits: 151 }, { level: 2, atUnits: 302 }],
   };
   const snapshot = createReplaySnapshot(source);
@@ -34,6 +36,8 @@ test('replay snapshots preserve the complete historical round', () => {
     won: true,
     visualSeed: 912345,
     turbo: true,
+    secondChance: false,
+    attempts: [421],
     bonusTransitions: [{ level: 1, atUnits: 151 }, { level: 2, atUnits: 302 }],
   });
   assert.ok(Object.isFrozen(snapshot));

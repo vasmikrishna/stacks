@@ -28,6 +28,8 @@ export function createReplaySnapshot(round) {
     won: Boolean(round.won),
     visualSeed: integer(round.visualSeed, 'visual seed', 0, 0xffffffff),
     turbo: Boolean(round.turbo),
+    secondChance: Boolean(round.secondChance),
+    attempts: Object.freeze((round.attempts || [round.resultUnits]).map((result) => integer(result, 'attempt result', 96, 100000))),
     bonusTransitions: Object.freeze((round.bonusTransitions || []).map((transition) => Object.freeze({
       level: integer(transition.level, 'bonus level', 1, 4),
       atUnits: integer(transition.atUnits, 'bonus multiplier', 100, 100000),

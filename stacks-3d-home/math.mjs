@@ -1,5 +1,5 @@
 export const RTP = 0.965;
-export const MAX_MULTIPLIER = 1000;
+export const MAX_MULTIPLIER = 39;
 const SAMPLE_COUNT = 2 ** 32;
 
 export const BONUS_STAGES = [

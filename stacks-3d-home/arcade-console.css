@@ -54,7 +54,7 @@
 .bottom-playbar .toggle-pill[aria-checked='true'] { background: #64e58c; border-color: #64e58c; }
 .bottom-playbar .toggle-pill[aria-checked='true'] img { filter: none; }
 .bottom-playbar .turbo-button {
-  display: grid; place-items: center; justify-self: center; width: 52px; height: 52px;
+  position: relative; display: grid; place-items: center; justify-self: center; width: 52px; height: 52px;
   border: 1px solid #56636e; border-radius: 50%; background: #0e141a; padding: 12px;
 }
 .bottom-playbar .turbo-button img { width: 27px; height: 27px; filter: invert(1); }
@@ -64,6 +64,34 @@
 }
 .bottom-playbar .turbo-button[aria-checked='true']:hover:not(:disabled) { background: #ffe078; }
 .bottom-playbar .turbo-button[aria-checked='true'] img { filter: none; }
+.bottom-playbar .turbo-button span {
+  position: absolute; right: -7px; bottom: -5px; min-width: 27px; padding: 2px 3px;
+  border: 1px solid #ffd35a; border-radius: 3px; background: #11171d; color: #ffd35a;
+  font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.second-chance-toggle {
+  position: absolute; right: 230px; top: 4px; display: flex; align-items: center; gap: 7px;
+  min-height: 30px; padding: 4px 9px; border: 1px solid #8057d8; border-radius: 3px;
+  background: #171225; color: #d9c7ff; font: 600 12px/1 Rajdhani, 'Arial Narrow', sans-serif; text-transform: uppercase;
+}
+.second-chance-toggle::before { content: ''; width: 11px; height: 11px; border: 2px solid currentColor; transform: rotate(45deg); }
+.second-chance-toggle[aria-checked='true'] { border-color: #c89aff; background: #6c39c5; color: #fff; box-shadow: 0 0 14px #9b6cff55; }
+.second-chance-toggle small { color: #ad9bc9; font-size: 9px; }
+.second-chance-toggle[aria-checked='true'] small { color: #f1eaff; }
+.second-chance-dialog { width: min(430px, calc(100% - 28px)); padding: 0; border: 1px solid #855ce0; border-radius: 6px; background: #0d1118; color: #f7fbff; box-shadow: 0 28px 90px #000c; }
+.second-chance-dialog::backdrop { background: #02040ad9; backdrop-filter: blur(4px); }
+.second-chance-shell { padding: 26px; }
+.second-chance-kicker { color: #c89aff; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.second-chance-shell h2 { margin: 5px 0 8px; font-size: 30px; }
+.second-chance-shell p { margin: 0; color: #aab8c4; line-height: 1.5; }
+.second-chance-shell dl { display: grid; gap: 1px; margin: 20px 0; background: #28313b; }
+.second-chance-shell dl div { display: flex; justify-content: space-between; padding: 11px 12px; background: #131a22; }
+.second-chance-shell dt { color: #91a2af; }
+.second-chance-shell dd { margin: 0; color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; }
+.second-chance-shell dl div:last-child dd { color: #7ef0a3; }
+.second-chance-actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
+.second-chance-actions button { min-height: 46px; border: 1px solid #394651; border-radius: 3px; background: #151c24; color: #dbe7ee; font-weight: 600; }
+.second-chance-actions #confirmSecondChance { border-color: #9a6bef; background: #8452dc; color: white; }
 .bottom-playbar #barSettings {
   grid-column: auto; grid-row: auto; justify-self: end; width: 48px; height: 56px;
   border-radius: 3px; background: #10151b; border-color: #303b45;
@@ -90,6 +118,8 @@
   .bottom-playbar .autoplay-control label { font-size: 13px; }
   .bottom-playbar .toggle-pill { flex-basis: 42px; width: 42px; height: 42px; }
   .bottom-playbar #barSettings { grid-column: 4; grid-row: 1; width: 40px; height: 44px; }
+  .second-chance-toggle { right: 180px; top: 3px; width: 34px; min-height: 34px; justify-content: center; padding: 5px; }
+  .second-chance-toggle span, .second-chance-toggle small { display: none; }
 }
 @media (max-width: 380px) {
   .bottom-playbar { grid-template-columns: minmax(0,1fr) 44px 52px 44px; }

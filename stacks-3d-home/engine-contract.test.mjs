@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SAMPLE_COUNT, SUPPORTED_TARGETS, nearestTarget, targetMode, modeTarget, samplesAtLeast, modeBooks, apiAmount, amountText, decodeOutcome } from './engine-contract.mjs';
+import { SAMPLE_COUNT, SECOND_CHANCE_COST, SECOND_CHANCE_PAYOUTS, SUPPORTED_TARGETS, nearestTarget, secondChanceBooks, secondChanceMode, targetMode, modeCost, modeTarget, samplesAtLeast, modeBooks, apiAmount, amountText, decodeOutcome } from './engine-contract.mjs';
 import { winProbability } from './math.mjs';
 import { createEngineSession } from './engine-session.mjs';
 
@@ -22,6 +22,26 @@ test('all supported targets preserve exact total weight, win odds and payouts', 
   }
 });
 
+test('Second Chance modes provide two attempts at 2x cost and preserve 96.5% RTP', () => {
+  for (const target of SUPPORTED_TARGETS) {
+    const rows=secondChanceBooks(target),mode=secondChanceMode(target);
+    const total=rows.reduce((sum,row)=>sum+row.weight,0n);
+    const wins=rows.filter(row=>row.book.payoutMultiplier).reduce((sum,row)=>sum+row.weight,0n);
+    const payoutUnits=SECOND_CHANCE_PAYOUTS[target];
+    const rtp=Number(wins)/Number(total)*payoutUnits/SECOND_CHANCE_COST;
+    assert.equal(total,SAMPLE_COUNT);
+    assert.ok(Math.abs(rtp-96.5)<0.000001,`${mode} RTP ${rtp}`);
+    assert.ok(payoutUnits<4000);
+    assert.equal(modeCost(mode),2);
+    for(const row of rows){
+      const outcome=decodeOutcome(row.book.events,mode);
+      assert.equal(outcome.secondChance,true);
+      assert.ok(outcome.attempts.length<=2);
+      assert.equal(outcome.payoutUnits,row.book.payoutMultiplier);
+    }
+  }
+});
+
 test('mode schedule satisfies Engine base volatility, hit-rate and 40x tail limits', () => {
   for (const target of SUPPORTED_TARGETS) {
     const probability = Number(samplesAtLeast(target)) / Number(SAMPLE_COUNT);
@@ -36,10 +56,10 @@ test('mode schedule satisfies Engine base volatility, hit-rate and 40x tail limi
 test('representative books preserve stage odds, cap, and exact target ties', () => {
   for (const target of [150, 250, 300, 700, 2500, 3900]) {
     const rows = modeBooks(target);
-    for (const threshold of [100, 150, 300, 700, 2500, 100000]) {
+    for (const threshold of [100, 150, 300, 700, 2500, 3900]) {
       assert.equal(rows.filter(row => row.book.events[0].resultUnits >= threshold).reduce((sum, row) => sum + row.weight, 0n), samplesAtLeast(threshold));
     }
-    assert.equal(rows[0].book.events[0].resultUnits, 100000);
+    assert.equal(rows[0].book.events[0].resultUnits, 3900);
     assert.equal(decodeOutcome(rows[0].book.events, targetMode(target)).payoutUnits, target);
   }
   assert.throws(() => targetMode(100));
@@ -84,6 +104,22 @@ test('Engine authenticates, uses selected target mode and only server balances',
   await assert.rejects(session.play('1', 250));
   assert.equal(await session.finish(), 11500000);
   assert.equal(mock.calls.length, 3);
+});
+
+test('Engine charges Second Chance against the 2x mode cost and sends its own mode', async () => {
+  const calls=[],book=secondChanceBooks(250)[1].book;
+  const fetcher=async (url,options)=>{
+    const body=options.body&&JSON.parse(options.body);calls.push({url,body});
+    const payload=url.endsWith('/authenticate')
+      ? {balance:{amount:2000000,currency:'USD'},config:{minBet:100000,maxBet:2000000,stepBet:100000,betLevels:[100000,1000000]}}
+      : {balance:{amount:0,currency:'USD'},round:{amount:1000000,payout:3100000,active:true,mode:'second_chance_250',state:book.events,betID:9}};
+    return {ok:true,json:async()=>payload};
+  };
+  const session=createEngineSession('https://game.test/?sessionID=t&rgs_url=rgs.test',{fetcher});
+  await session.authenticate();
+  const round=await session.play('1',250,{secondChance:true});
+  assert.equal(round.outcome.attempts.length,2);
+  assert.deepEqual(calls[1].body,{sessionID:'t',amount:1000000,mode:'second_chance_250'});
 });
 
 test('inactive rounds do not call end-round; active rounds resume without play', async () => {

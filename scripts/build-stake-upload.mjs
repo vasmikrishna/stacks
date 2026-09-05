@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import * as zlib from 'node:zlib';
 import assert from 'node:assert/strict';
-import { modeBooks, targetMode, SAMPLE_COUNT, samplesAtLeast, SUPPORTED_TARGETS } from '../stacks-3d-home/engine-contract.mjs';
+import { modeBooks, secondChanceBooks, secondChanceMode, targetMode, SAMPLE_COUNT, samplesAtLeast, SUPPORTED_TARGETS } from '../stacks-3d-home/engine-contract.mjs';
 
 if (!zlib.zstdCompressSync) throw new Error('Use Node.js 24 or newer to create the Zstandard math files.');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,34 +46,40 @@ function mathFile(name, contents) {
   checksums.push(`${createHash('sha256').update(buffer).digest('hex')}  math/${name}`);
 }
 
-for (const [targetIndex, target] of SUPPORTED_TARGETS.entries()) {
-  const name = targetMode(target), rows = modeBooks(target);
+const modeDefinitions = SUPPORTED_TARGETS.flatMap(target => [
+  { name: targetMode(target), target, cost: 1, rows: modeBooks(target), secondChance: false },
+  { name: secondChanceMode(target), target, cost: 2, rows: secondChanceBooks(target), secondChance: true },
+]);
+for (const [targetIndex, definition] of modeDefinitions.entries()) {
+  const { name, target, cost, rows, secondChance } = definition;
   let weight = 0n, wins = 0n;
   const books = [], csv = [];
   for (const { book, weight: count } of rows) {
     assert(count > 0n);
     assert.equal(book.id, books.length);
     assert.equal(book.events[1].amount, book.payoutMultiplier);
-    assert.equal(book.payoutMultiplier, book.events[0].resultUnits >= target ? target : 0);
+    const results = book.events[0].attempts || [book.events[0].resultUnits];
+    assert.equal(Boolean(book.payoutMultiplier), results.some(result => result >= target));
     weight += count;
     if (book.payoutMultiplier) wins += count;
     books.push(JSON.stringify(book));
     csv.push(`${book.id},${count},${book.payoutMultiplier}`);
   }
   assert.equal(weight, SAMPLE_COUNT);
-  assert.equal(wins, samplesAtLeast(target));
+  if (!secondChance) assert.equal(wins, samplesAtLeast(target));
   const plain = Buffer.from(books.join('\n') + '\n');
   const compressed = zlib.zstdCompressSync(plain, { params: { [zlib.constants.ZSTD_c_compressionLevel]: 3 } });
   assert(zlib.zstdDecompressSync(compressed).equals(plain));
   const events = `books_${name}.jsonl.zst`, weights = `lookUpTable_${name}_0.csv`;
   mathFile(events, compressed);
   mathFile(weights, csv.join('\n') + '\n');
-  modes.push({ name, cost: 1, events, weights });
+  modes.push({ name, cost, events, weights });
   totalOutcomes += rows.length;
-  const rtp = Number(wins) / Number(weight) * target;
+  const maxPayout = Math.max(...rows.map(row => row.book.payoutMultiplier));
+  const rtp = Number(wins) / Number(weight) * maxPayout / cost;
   minRtp = Math.min(minRtp, rtp); maxRtp = Math.max(maxRtp, rtp);
-  statistics.push(`${name},${(target / 100).toFixed(2)},${rtp.toFixed(9)},${Number(wins) / Number(weight)},${weight},${rows.length},0,${rows.find(row => !row.book.payoutMultiplier).book.id}`);
-  if ((targetIndex + 1) % 25 === 0) console.log(`Math: ${targetIndex + 1}/${SUPPORTED_TARGETS.length} targets verified and written`);
+  statistics.push(`${name},${(target / 100).toFixed(2)},${rtp.toFixed(9)},${Number(wins) / Number(weight)},${weight},${rows.length},${maxPayout / 100},${rows.find(row => !row.book.payoutMultiplier).book.id}`);
+  if ((targetIndex + 1) % 10 === 0) console.log(`Math: ${targetIndex + 1}/${modeDefinitions.length} modes verified and written`);
 }
 mathFile('index.json', JSON.stringify({ modes }) + '\n');
 fs.writeFileSync(path.join(output, 'MODE-STATISTICS.csv'), statistics.join('\n') + '\n');
@@ -86,16 +92,16 @@ copy(path.join(source, 'assets/logo-velocity.png'), path.join(branding, 'stacks-
 const report = {
   game: 'STACKS', publisher: 'VARCHAS Games', generatedAt: new Date().toISOString(),
   status: 'integration-test-build-not-production-approved',
-  targetRange: { minimum: Math.min(...SUPPORTED_TARGETS) / 100, maximum: Math.max(...SUPPORTED_TARGETS) / 100, schedule: 'Engine-compliant prediction modes with a smooth local control', count: modes.length },
+  targetRange: { minimum: Math.min(...SUPPORTED_TARGETS) / 100, maximum: Math.max(...SUPPORTED_TARGETS) / 100, schedule: 'Nine standard modes and nine 2x-cost Second Chance modes', count: modes.length },
   mathFiles: 1 + modes.length * 2, totalOutcomes, mathBytes,
   totalWeightPerMode: String(SAMPLE_COUNT), rtpPercentRange: [minRtp, maxRtp],
-  verification: { everyModeWeightsSumTo2Pow32: true, everyModeMatchesExistingWinOdds: true, allBookCsvPayoutsMatch: true, allZstdFilesRoundTrip: true },
-  revealModel: 'Representative entropy-interval midpoints, not the original full numeric reveal distribution. Target win probabilities and bonus-stage crossing probabilities are exact.',
+  verification: { everyModeWeightsSumTo2Pow32: true, everyModeRtpIs965Percent: true, allBookCsvPayoutsMatch: true, allZstdFilesRoundTrip: true },
+  revealModel: 'Standard modes use representative entropy-interval midpoints. Second Chance modes encode one or two deterministic attempts and preserve 96.5% RTP at a 2x cost.',
   pending: ['Stake Engine acceptance of the configured mode count is unverified.', 'Real RGS session/currency and dashboard upload tests have not been performed.', 'Platform approval, social-mode terminology, and full jurisdiction requirements need review.'],
   sources: ['https://stake-engine.com/docs/math/math-file-format', 'https://stake-engine.com/docs/rgs/wallet', 'https://stake-engine.com/docs/approval-guidelines/game-replay-requirements'],
 };
 writeJson(path.join(output, 'MATH-REPORT.json'), report);
-fs.writeFileSync(path.join(output, 'UPLOAD-INSTRUCTIONS.md'), `# STACKS Upload Files\n\nStatus: integration test build, not production approved.\n\n## Frontend\n\nExtract frontend.zip. In Stake Engine Files > Import Files > Frontend, select the contents of the extracted frontend directory. index.html must be at the upload root. Include every JS/MJS/CSS file plus assets/ and vendor/ with their relative paths.\n\nThe exported frontend requires an Engine launch URL (sessionID and rgs_url), or a public replay URL.\n\n## Math\n\nExtract math.zip. In Files > Import Files > Math, select all ${1 + SUPPORTED_TARGETS.length * 2} contents of math/. It contains index.json plus one event book and lookup table for each of ${SUPPORTED_TARGETS.length} Engine modes. target_250 is 2.50x. Retain exact names.\n\nThe local prediction control moves smoothly in 0.01x increments. Stake wallet rounds can use only the modes contained in this math package. The ZIP files are delivery containers; use the extracted folder if the uploader requests files.\n\n## Branding\n\nbranding/varchas-games-transparent.png is the background-free publisher logo. stacks-logo.png is the game logo.\n\n## Verification\n\nMATH-REPORT.json records mathematical verification. SHA256SUMS.txt identifies exported files. Test frontend and math together in the dashboard before production approval.\n\n## Rebuild\n\nFrom the original project with Node.js 24+: node scripts/build-stake-upload.mjs\n`);
+fs.writeFileSync(path.join(output, 'UPLOAD-INSTRUCTIONS.md'), `# STACKS Upload Files\n\nStatus: Version 4 integration test build, not production approved.\n\n## Frontend\n\nExtract frontend.zip. In Stake Engine Files > Import Files > Frontend, select the contents of the extracted frontend directory. index.html must be at the upload root. Include every JS/MJS/CSS file plus assets/ and vendor/ with their relative paths.\n\nThe exported frontend requires an Engine launch URL (sessionID and rgs_url), or a public replay URL.\n\n## Math\n\nExtract math.zip. In Files > Import Files > Math, select all ${1 + modeDefinitions.length * 2} contents of math/. It contains index.json plus one event book and lookup table for each of ${modeDefinitions.length} Engine modes. target_250 is standard 2.50x; second_chance_250 is its 2x-cost Second Chance mode. Retain exact names.\n\nThe local prediction control moves smoothly in 0.01x increments. Stake wallet rounds can use only the modes contained in this math package. The ZIP files are delivery containers; use the extracted folder if the uploader requests files.\n\n## Branding\n\nbranding/varchas-games-transparent.png is the background-free publisher logo. stacks-logo.png is the game logo.\n\n## Verification\n\nMATH-REPORT.json records mathematical verification. SHA256SUMS.txt identifies exported files. Test frontend and math together in the dashboard before production approval.\n\n## Rebuild\n\nFrom the original project with Node.js 24+: node scripts/build-stake-upload.mjs\n`);
 
 function filesBelow(directory, prefix = '') {
   return fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(entry => entry.isDirectory() ? filesBelow(path.join(directory, entry.name), prefix + entry.name + '/') : [prefix + entry.name]);

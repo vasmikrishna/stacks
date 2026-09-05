@@ -541,8 +541,9 @@
           <div class="stepper"></div>
         </div>
         <button class="play-button">Start Stack</button>
-        <button class="turbo-button" id="turbo" role="switch" aria-checked="false" aria-label="Turbo mode off" title="Turbo mode: faster round reveals">
+        <button class="turbo-button" id="turbo" role="switch" aria-checked="false" aria-label="Turbo mode off" title="Turbo mode: 2.5x faster round presentation">
           <img src="./assets/arcade/zap.svg" alt="">
+          <span aria-hidden="true">2.5x</span>
         </button>
         <div class="control autoplay-control">
           <div class="autoplay-copy"><label for="autoplay">Autoplay</label><output id="autoplayProgress" aria-live="polite" hidden></output></div>
@@ -550,6 +551,23 @@
         </div>
         <button class="icon-button" id="barSettings" aria-label="Open settings" title="Settings"><img src="./assets/arcade/settings.svg" alt=""></button>
       </section>
+
+      <dialog class="second-chance-dialog" id="secondChanceDialog" aria-labelledby="secondChanceTitle">
+        <form method="dialog" class="second-chance-shell">
+          <span class="second-chance-kicker">Feature mode</span>
+          <h2 id="secondChanceTitle">Second Chance</h2>
+          <p>Get a second stack attempt if the first stack breaks before your target.</p>
+          <dl>
+            <div><dt>Target</dt><dd id="secondChanceTarget">2.50x</dd></div>
+            <div><dt>Total cost</dt><dd id="secondChanceCost">200.00</dd></div>
+            <div><dt>Possible payout</dt><dd id="secondChancePayout">310.00</dd></div>
+          </dl>
+          <div class="second-chance-actions">
+            <button value="cancel">Cancel</button>
+            <button value="confirm" id="confirmSecondChance">Play Second Chance</button>
+          </div>
+        </form>
+      </dialog>
 
       <aside class="settings-drawer" id="settingsDrawer" aria-label="Settings panel">
         <div class="drawer-head">
@@ -597,8 +615,8 @@
                 </div>
               </div>
 
-              <div class="bonus-legend" aria-label="Bonus mode milestones">
-                <span>Bonus modes</span>
+              <div class="bonus-legend" aria-label="Stack stage milestones">
+                <span>Stack stages</span>
                 <div><strong>1.50x</strong><small>Stack Bonus</small></div>
                 <div><strong>3.00x</strong><small>Double Stack</small></div>
                 <div><strong>7.00x</strong><small>Super Stack</small></div>
@@ -607,14 +625,14 @@
             </section>
 
             <section class="game-info-panel bonus-panel" id="bonusPanel" role="tabpanel" aria-labelledby="bonusTab" hidden>
-              <header class="panel-intro"><span>Multiplier milestones</span><p>Higher stages change the tower pace and celebration. Your payout always uses the target you selected.</p></header>
+              <header class="panel-intro"><span>Second Chance</span><p>Pay 2x the base stake. If the first stack breaks before your target, a second deterministic attempt begins.</p></header>
               <div class="bonus-stage-list">
-                <div><strong>1.50x</strong><span>Stack Bonus</span><p>Extra blocks join the build.</p></div>
-                <div><strong>3.00x</strong><span>Double Stack</span><p>Block growth increases.</p></div>
-                <div><strong>7.00x</strong><span>Super Stack</span><p>The tower builds at its fastest pace.</p></div>
-                <div><strong>25.00x</strong><span>Legendary</span><p>The highest celebration tier begins.</p></div>
+                <div><strong>2x</strong><span>Total cost</span><p>The base stake is charged twice when you confirm.</p></div>
+                <div><strong>2</strong><span>Attempts</span><p>A second stack appears only when the first attempt misses.</p></div>
+                <div><strong>96.5%</strong><span>RTP</span><p>Every Second Chance target uses the same configured RTP.</p></div>
+                <div><strong>&lt;40x</strong><span>Maximum</span><p>The largest feature payout remains below the 40x tail threshold.</p></div>
               </div>
-              <p class="bonus-note">Bonus modes do not multiply the selected payout. Selectable target range: 1.50x to 39x.</p>
+              <p class="bonus-note">The confirmation panel always shows the exact total cost and possible payout before play. Second Chance is unavailable during autoplay.</p>
             </section>
 
             <section class="game-info-panel history-panel" id="historyPanel" role="tabpanel" aria-labelledby="historyTab" hidden>
@@ -641,9 +659,9 @@
       </dialog>
     </main>
 
-    <script type="module" src="./main.js?v=23"></script>
+    <script type="module" src="./main.js?v=24"></script>
     <link rel="stylesheet" href="./game.css?v=5" />
-    <link rel="stylesheet" href="./arcade-console.css?v=4" />
+    <link rel="stylesheet" href="./arcade-console.css?v=5" />
     <link rel="stylesheet" href="./prediction-ruler.css?v=2" />
     <link rel="stylesheet" href="./win-celebration.css?v=2" />
     <link rel="stylesheet" href="./recent-results.css?v=2" />
