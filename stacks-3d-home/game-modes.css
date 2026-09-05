@@ -60,14 +60,55 @@
  #modeDialog .mode-quote { font-size: 13px; }
 }
 @media(max-height:650px) { #modeDialog .mode-art { max-width: 90px; } }
-body[data-mode=prism] .stage { background: #102724; }
-body[data-mode=tesseract] .stage { background: #141027; }
-body[data-mode=reactor] .stage { background: #181e14; }
+body[data-mode=prism] .stage { background: #080e10; }
+body[data-mode=tesseract] .stage { background: #0a0c13; }
+body[data-mode=reactor] .stage { background: #0b0e10; }
 body:not([data-mode=classic]) .stage-space { background: transparent; }
-body[data-mode=prism] .stage-space { background-image: repeating-linear-gradient(115deg,transparent 0 100px,#a0f5d508 101px 102px); }
-body[data-mode=tesseract] .stage-space { background-image: linear-gradient(#baa8ff09 1px,transparent 1px),linear-gradient(90deg,#baa8ff09 1px,transparent 1px); background-size: 64px 64px; }
-body[data-mode=reactor] .stage-space { background-image: repeating-linear-gradient(0deg,transparent 0 56px,#c8f65c0a 57px 58px); }
+body[data-mode=prism] .stage-space { background-image: none; }
+body[data-mode=tesseract] .stage-space { background-image: none; }
+body[data-mode=reactor] .stage-space { background-image: none; }
 body.intro-active .mode-panel { visibility: hidden; }
+/* Keep tool hit areas on the same baseline as the amount input. */
+.bottom-playbar { align-items: end; column-gap: 8px; }
+.bottom-playbar #bonusMode,
+.bottom-playbar .turbo-button,
+.bottom-playbar .toggle-pill,
+.bottom-playbar #barSettings {
+ box-sizing: border-box; width: 44px; height: 44px; min-width: 0;
+ align-self: end; justify-self: center; margin: 0; padding: 7px;
+}
+.bottom-playbar #bonusMode { padding: 2px; }
+.bottom-playbar .autoplay-control {
+ height: 44px; align-self: end; margin: 0; padding: 0; gap: 8px; border: 0;
+}
+.bottom-playbar .toggle-pill { flex: 0 0 44px; }
+.bottom-playbar .turbo-button img,
+.bottom-playbar .toggle-pill img,
+.bottom-playbar #barSettings img { width: 26px; height: 26px; }
+.bottom-playbar #bonusMode b,
+.bottom-playbar .turbo-button span {
+ box-sizing: border-box; top: -7px; bottom: auto; right: -3px;
+ height: 17px; min-width: 23px; padding: 1px 3px;
+ font: 600 11px/13px Rajdhani, sans-serif; text-align: center;
+}
+@media(min-width:701px) {
+ .bottom-playbar { align-items: center; }
+ .bottom-playbar #bonusMode,
+ .bottom-playbar .turbo-button,
+ .bottom-playbar .autoplay-control,
+ .bottom-playbar .toggle-pill,
+ .bottom-playbar #barSettings { align-self: center; }
+}
+@media(max-width:700px) {
+ .bottom-playbar { column-gap: 5px; }
+ .bottom-playbar #bonusMode,
+ .bottom-playbar .turbo-button,
+ .bottom-playbar .toggle-pill,
+ .bottom-playbar #barSettings { width: 40px; height: 40px; }
+ .bottom-playbar .autoplay-control { height: 40px; gap: 0; position: relative; }
+ .bottom-playbar .toggle-pill { flex-basis: 40px; }
+ .bottom-playbar #autoplayProgress { position: absolute; bottom: 100%; right: 0; font-size: 10px; }
+}
 @media(max-width:700px) {
  .app { grid-template-rows: 60px minmax(200px,1fr) 30px 104px 154px; }
  .mode-panel { padding: 0 8px; }

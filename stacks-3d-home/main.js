@@ -84,7 +84,7 @@ modePanel.className='mode-panel';modePanel.setAttribute('aria-label','Payout quo
 modePanel.innerHTML='<div class="mode-quote"><span>Total payout <strong id="modePayout"></strong></span><span>Win chance <strong id="modeOdds"></strong></span></div>';
 const modeDialog=document.createElement('dialog');
 modeDialog.id='modeDialog';modeDialog.setAttribute('aria-labelledby','modeDialogTitle');
-modeDialog.innerHTML=`<header><h2 id="modeDialogTitle">Choose your mode</h2><button type="button" class="mode-close" aria-label="Close mode selector" title="Close">×</button></header><div class="mode-options" role="group" aria-label="Game mode">${GAME_MODES.map(mode=>`<button type="button" data-mode="${mode.id}" aria-pressed="false"><span class="mode-art" aria-hidden="true"></span><span class="mode-check" aria-hidden="true">✓</span><span>${mode.label}</span><b>${mode.boost}x</b></button>`).join('')}</div><div class="mode-quote"><span>Total payout <strong id="modalPayout"></strong></span><span>Win chance <strong id="modalOdds"></strong></span></div><p class="mode-risk">Higher boosts have lower win chances.</p><button type="button" id="confirmMode">Use Classic</button>`;
+modeDialog.innerHTML=`<header><h2 id="modeDialogTitle">Choose your mode</h2><button type="button" class="mode-close" aria-label="Close mode selector" title="Close">×</button></header><div class="mode-options" role="group" aria-label="Game mode">${GAME_MODES.map(mode=>`<button type="button" data-mode="${mode.id}" aria-pressed="false"><span class="mode-art" aria-hidden="true"></span><span class="mode-check" aria-hidden="true">✓</span><span>${mode.label}</span><b>${mode.boost}x</b></button>`).join('')}</div><div class="mode-quote"><span>Total payout <strong id="modalPayout"></strong></span></div><p class="mode-risk">Higher boosts have lower win chances.</p><button type="button" id="confirmMode">Use Classic</button>`;
 document.body.append(modeDialog);
 const bonusButton=document.createElement('button');
 bonusButton.type='button';bonusButton.id='bonusMode';bonusButton.setAttribute('aria-haspopup','dialog');bonusButton.setAttribute('aria-controls','modeDialog');
@@ -97,7 +97,6 @@ function refreshModeDialog(){
  const units=boostedPayoutUnits(multiplierUnits(normalizePrediction(Number($('#prediction').value)||2.5)),pendingMode);
  let amount='--';try{amount=money(Number(BigInt(apiAmount($('#bet').value))*BigInt(units)/100n)/10000);}catch{}
  $('#modalPayout').textContent=`${amount} (${(units/100).toFixed(2)}x)`;
- $('#modalOdds').textContent=(Number(samplesAtLeast(units))/Number(SAMPLE_COUNT)*100).toFixed(2)+'%';
  $('#confirmMode').textContent='Use '+gameMode(pendingMode).label;
 }
 bonusButton.onclick=()=>{if(modeBlocked())return;pendingMode=state.modeId;refreshModeDialog();modeDialog.showModal();modeDialog.querySelector('[aria-pressed="true"]').focus();};
@@ -699,10 +698,10 @@ const effects=stageEffects(scene,turntable);
 function applyModeTheme(){
  const mode=gameMode(state.modeId);
  document.body.dataset.mode=mode.id;
- scene.fog.color.setHex(mode.background);
- scene.getObjectByName('stageGround').material.color.setHex(mode.background);
- fill.color.setHex(mode.colors[1]);
- platform.material.color.setHex(mode.id==='prism'?0x58766e:mode.id==='reactor'?0x353c2a:0x17202a);
+ scene.fog.color.setHex(0x080c12);
+ scene.getObjectByName('stageGround').material.color.setHex(0x080c12);
+ fill.color.setHex(0x6659ef);
+ platform.material.color.setHex(mode.id==='prism'?0x182724:mode.id==='reactor'?0x22271e:0x17202a);
  for(const block of blocks){
   const {feature,reactorCore,cage}=block.userData;
   feature.visible=mode.id==='prism'||mode.id==='tesseract';
