@@ -1,3 +1,4 @@
+import { gameMode, boostedPayoutUnits, modeRevealUnits } from './game-modes.mjs';
 export const SAMPLE_COUNT = 4294967296n;
 export const MIN_TARGET = 101;
 export const MAX_TARGET = 100000;
@@ -5,12 +6,6 @@ export const MAX_REVEAL_UNITS = 3900;
 export const SUPPORTED_TARGETS = Object.freeze([
   150, 200, 250, 300, 500, 700, 1000, 2500, 3900,
 ]);
-export const SECOND_CHANCE_COST = 2;
-export const SECOND_CHANCE_PAYOUTS = Object.freeze(Object.fromEntries(SUPPORTED_TARGETS.map(target => {
-  const singleChance = 96.5 / target;
-  const twoChanceProbability = 1 - (1 - singleChance) ** 2;
-  return [target, Math.round(193 / twoChanceProbability)];
-})));
 
 export function nearestTarget(units) {
   if (!Number.isFinite(units)) throw new RangeError('Invalid target');
@@ -21,22 +16,18 @@ export function nearestTarget(units) {
   return best;
 }
 
-export function targetMode(units) {
+export function targetMode(units, modeId = 'classic') {
   if (!Number.isInteger(units) || !SUPPORTED_TARGETS.includes(units)) throw new RangeError('Select a supported prediction.');
-  return `target_${units}`;
-}
-
-export function secondChanceMode(units) {
-  if (!Number.isInteger(units) || !SUPPORTED_TARGETS.includes(units)) throw new RangeError('Select a supported prediction.');
-  return `second_chance_${units}`;
+  gameMode(modeId);
+  return modeId === 'classic' ? `target_${units}` : `${modeId}_target_${units}`;
 }
 
 export function modeDetails(mode) {
-  const match = /^(target|second_chance)_(\d+)$/.exec(mode);
+  const match = /^(?:(prism|tesseract|reactor)_)?target_(\d+)$/.exec(mode);
   const targetUnits = Number(match?.[2]);
   if (!match || String(targetUnits) !== match[2] || !SUPPORTED_TARGETS.includes(targetUnits)) throw new RangeError('Invalid mode');
-  const secondChance = match[1] === 'second_chance';
-  return { targetUnits, secondChance, cost: secondChance ? SECOND_CHANCE_COST : 1 };
+  const modeId = match[1] || 'classic';
+  return { targetUnits, modeId, boost: gameMode(modeId).boost, cost: 1 };
 }
 
 export function modeCost(mode) {
@@ -55,55 +46,31 @@ export function samplesAtLeast(units) {
 
 // Split entropy at all financially/visually significant thresholds. Midpoint
 // reveals approximate the numeric distribution without changing target odds.
-export function modeBooks(targetUnits) {
-  targetMode(targetUnits);
-  const cuts = new Set([0n, SAMPLE_COUNT, samplesAtLeast(targetUnits)]);
-  for (const units of [100, 150, 300, 700, 2500, MAX_REVEAL_UNITS]) cuts.add(samplesAtLeast(units));
+export function modeBooks(targetUnits, modeId = 'classic') {
+  targetMode(targetUnits, modeId);
+  const { boost } = gameMode(modeId);
+  const payoutUnits = boostedPayoutUnits(targetUnits, modeId);
+  const cuts = new Set([0n, SAMPLE_COUNT, samplesAtLeast(payoutUnits)]);
+  for (const units of [100, 150, 300, 700, 2500, MAX_REVEAL_UNITS]) cuts.add(samplesAtLeast(units * boost));
   for (let part = 1n; part < 32n; part++) cuts.add(SAMPLE_COUNT * part / 32n);
   const sorted = [...cuts].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
   return sorted.slice(1).map((upper, id) => {
     const lower = sorted[id];
     const sample = lower + 1n + (upper - lower - 1n) / 2n;
-    const units = Number(965n * SAMPLE_COUNT / (10n * sample));
-    const resultUnits = Math.min(MAX_REVEAL_UNITS, units);
-    const payoutMultiplier = resultUnits >= targetUnits ? targetUnits : 0;
+    const resultUnits = modeRevealUnits(Number(sample - 1n), modeId);
+    const payoutMultiplier = resultUnits >= targetUnits ? payoutUnits : 0;
     return {
       weight: upper - lower,
       book: {
         id,
         payoutMultiplier,
         events: [
-          { index: 0, type: 'stacksReveal', targetUnits, resultUnits, visualSeed: Number(sample - 1n) },
+          { index: 0, type: 'stacksReveal', modeId, boost, targetUnits, resultUnits, visualSeed: Number(sample - 1n) },
           { index: 1, type: 'finalWin', amount: payoutMultiplier },
         ],
       },
     };
   });
-}
-
-export function secondChanceBooks(targetUnits) {
-  secondChanceMode(targetUnits);
-  const payoutMultiplier = SECOND_CHANCE_PAYOUTS[targetUnits];
-  const winWeight = 193n * SAMPLE_COUNT / BigInt(payoutMultiplier);
-  const firstWinWeight = samplesAtLeast(targetUnits);
-  const secondWinWeight = winWeight - firstWinWeight;
-  const lossWeight = SAMPLE_COUNT - winWeight;
-  if (secondWinWeight <= 0n || lossWeight <= 0n || payoutMultiplier >= 4000) throw new Error('Invalid Second Chance distribution');
-  const losingResult = Math.max(96, targetUnits - 1);
-  return [
-    { weight: firstWinWeight, book: { id: 0, payoutMultiplier, events: [
-      { index: 0, type: 'stacksSecondChance', targetUnits, attempts: [targetUnits], visualSeed: 101 + targetUnits },
-      { index: 1, type: 'finalWin', amount: payoutMultiplier },
-    ] } },
-    { weight: secondWinWeight, book: { id: 1, payoutMultiplier, events: [
-      { index: 0, type: 'stacksSecondChance', targetUnits, attempts: [losingResult, targetUnits], visualSeed: 202 + targetUnits },
-      { index: 1, type: 'finalWin', amount: payoutMultiplier },
-    ] } },
-    { weight: lossWeight, book: { id: 2, payoutMultiplier: 0, events: [
-      { index: 0, type: 'stacksSecondChance', targetUnits, attempts: [losingResult, Math.max(96, losingResult - 1)], visualSeed: 303 + targetUnits },
-      { index: 1, type: 'finalWin', amount: 0 },
-    ] } },
-  ];
 }
 
 export function apiAmount(text) {
@@ -125,14 +92,14 @@ export function decodeOutcome(state, mode) {
   const events = Array.isArray(state) ? state : state?.events;
   if (!Array.isArray(events)) throw new Error('The server returned no STACKS outcome.');
   const details = modeDetails(mode);
-  const reveal = events.find(event => event.type === (details.secondChance ? 'stacksSecondChance' : 'stacksReveal'));
+  const reveal = events.find(event => event.type === 'stacksReveal');
   const final = events.find(event => event.type === 'finalWin');
   const targetUnits = details.targetUnits;
   if (!reveal || reveal.targetUnits !== targetUnits || !Number.isInteger(reveal.visualSeed) || reveal.visualSeed < 0 || reveal.visualSeed > 0xffffffff) throw new Error('The server outcome does not match this target.');
-  const attempts = details.secondChance ? reveal.attempts : [reveal.resultUnits];
-  if (!Array.isArray(attempts) || attempts.length < 1 || attempts.length > (details.secondChance ? 2 : 1) || attempts.some(result => !Number.isInteger(result) || result < 96 || result > MAX_TARGET)) throw new Error('The server outcome contains invalid attempts.');
-  const won = attempts.some(result => result >= targetUnits);
-  const payoutUnits = won ? (details.secondChance ? SECOND_CHANCE_PAYOUTS[targetUnits] : targetUnits) : 0;
+  if ((reveal.modeId ?? 'classic') !== details.modeId || (reveal.boost ?? 1) !== details.boost) throw new Error('The server outcome does not match this game mode.');
+  if (!Number.isInteger(reveal.resultUnits) || reveal.resultUnits < 96 || reveal.resultUnits > MAX_TARGET) throw new Error('The server outcome contains an invalid result.');
+  const won = reveal.resultUnits >= targetUnits;
+  const payoutUnits = won ? boostedPayoutUnits(targetUnits, details.modeId) : 0;
   if (final?.amount !== payoutUnits) throw new Error('The server payout does not match the outcome.');
-  return { ...reveal, resultUnits: attempts.at(-1), attempts, payoutUnits, secondChance: details.secondChance, cost: details.cost };
+  return { ...reveal, payoutUnits, modeId: details.modeId, boost: details.boost, cost: 1 };
 }

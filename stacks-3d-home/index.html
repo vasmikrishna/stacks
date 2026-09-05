@@ -442,7 +442,7 @@
 
       <div class="intro-screen intro-screen--welcome" data-intro-screen="1">
         <img class="intro-logo" src="./assets/logo-velocity.png" alt="STACKS">
-        <p class="intro-tagline">Build higher. Cash out smarter.</p>
+        <p class="intro-tagline">Choose your target. Build your stack.</p>
         <button class="intro-primary" data-intro-next>
           <img src="./assets/arcade/play.svg" alt="">
           <span>Enter game</span>
@@ -552,23 +552,6 @@
         <button class="icon-button" id="barSettings" aria-label="Open settings" title="Settings"><img src="./assets/arcade/settings.svg" alt=""></button>
       </section>
 
-      <dialog class="second-chance-dialog" id="secondChanceDialog" aria-labelledby="secondChanceTitle">
-        <form method="dialog" class="second-chance-shell">
-          <span class="second-chance-kicker">Feature mode</span>
-          <h2 id="secondChanceTitle">Second Chance</h2>
-          <p>Get a second stack attempt if the first stack breaks before your target.</p>
-          <dl>
-            <div><dt>Target</dt><dd id="secondChanceTarget">2.50x</dd></div>
-            <div><dt>Total cost</dt><dd id="secondChanceCost">200.00</dd></div>
-            <div><dt>Possible payout</dt><dd id="secondChancePayout">310.00</dd></div>
-          </dl>
-          <div class="second-chance-actions">
-            <button value="cancel">Cancel</button>
-            <button value="confirm" id="confirmSecondChance">Play Second Chance</button>
-          </div>
-        </form>
-      </dialog>
-
       <aside class="settings-drawer" id="settingsDrawer" aria-label="Settings panel">
         <div class="drawer-head">
           <h2>Settings</h2>
@@ -625,14 +608,14 @@
             </section>
 
             <section class="game-info-panel bonus-panel" id="bonusPanel" role="tabpanel" aria-labelledby="bonusTab" hidden>
-              <header class="panel-intro"><span>Second Chance</span><p>Pay 2x the base stake. If the first stack breaks before your target, a second deterministic attempt begins.</p></header>
+              <header class="panel-intro"><span>Four worlds. One stack.</span><p>Choose your mode and target before play. A win pays the target multiplied by the mode boost. Higher boosts have lower win chances at the same stake.</p></header>
               <div class="bonus-stage-list">
-                <div><strong>2x</strong><span>Total cost</span><p>The base stake is charged twice when you confirm.</p></div>
-                <div><strong>2</strong><span>Attempts</span><p>A second stack appears only when the first attempt misses.</p></div>
-                <div><strong>96.5%</strong><span>RTP</span><p>Every Second Chance target uses the same configured RTP.</p></div>
-                <div><strong>&lt;40x</strong><span>Maximum</span><p>The largest feature payout remains below the 40x tail threshold.</p></div>
+                <div><strong>1x</strong><span>Classic</span><p>Original crystal cubes. Payout equals your target.</p></div>
+                <div><strong>2x</strong><span>Prism</span><p>Layered glass cubes. Payout equals twice your target.</p></div>
+                <div><strong>3x</strong><span>Tesseract</span><p>Connected nested cubes. Payout equals three times your target.</p></div>
+                <div><strong>5x</strong><span>Reactor</span><p>Metal frames and energized cores. Payout equals five times your target.</p></div>
               </div>
-              <p class="bonus-note">The confirmation panel always shows the exact total cost and possible payout before play. Second Chance is unavailable during autoplay.</p>
+              <p class="bonus-note">Each round charges your stake once and reveals one stack. Both total payout and win chance appear before play. The theoretical RTP is 96.5% in every mode. The stack reveal stops at 39x; the maximum boosted payout is 195x. There is no cashout. Turbo changes presentation speed only.</p>
             </section>
 
             <section class="game-info-panel history-panel" id="historyPanel" role="tabpanel" aria-labelledby="historyTab" hidden>
@@ -659,13 +642,14 @@
       </dialog>
     </main>
 
-    <script type="module" src="./main.js?v=24"></script>
+    <script type="module" src="./main.js?v=25"></script>
     <link rel="stylesheet" href="./game.css?v=5" />
-    <link rel="stylesheet" href="./arcade-console.css?v=5" />
+    <link rel="stylesheet" href="./arcade-console.css?v=6" />
     <link rel="stylesheet" href="./prediction-ruler.css?v=2" />
     <link rel="stylesheet" href="./win-celebration.css?v=2" />
     <link rel="stylesheet" href="./recent-results.css?v=2" />
     <link rel="stylesheet" href="./game-info-dialog.css?v=3" />
+    <link rel="stylesheet" href="./game-modes.css?v=1" />
     <script>
       const drawer = document.querySelector('#settingsDrawer');
       const toggleDrawer = () => drawer.classList.toggle('open');

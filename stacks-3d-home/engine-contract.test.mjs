@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SAMPLE_COUNT, SECOND_CHANCE_COST, SECOND_CHANCE_PAYOUTS, SUPPORTED_TARGETS, nearestTarget, secondChanceBooks, secondChanceMode, targetMode, modeCost, modeTarget, samplesAtLeast, modeBooks, apiAmount, amountText, decodeOutcome } from './engine-contract.mjs';
+import { SAMPLE_COUNT, SUPPORTED_TARGETS, nearestTarget, targetMode, modeCost, modeTarget, samplesAtLeast, modeBooks, apiAmount, amountText, decodeOutcome } from './engine-contract.mjs';
+import { GAME_MODES, boostedPayoutUnits, modeRevealUnits } from './game-modes.mjs';
 import { winProbability } from './math.mjs';
 import { createEngineSession } from './engine-session.mjs';
 
@@ -22,27 +23,33 @@ test('all supported targets preserve exact total weight, win odds and payouts', 
   }
 });
 
-test('Second Chance modes provide two attempts at 2x cost and preserve 96.5% RTP', () => {
-  for (const target of SUPPORTED_TARGETS) {
-    const rows=secondChanceBooks(target),mode=secondChanceMode(target);
+test('every boosted mode has one reveal, correct payout, matching demo odds and 96.5% RTP', () => {
+  for (const mode of GAME_MODES) for (const target of SUPPORTED_TARGETS) {
+    const rows=modeBooks(target,mode.id),name=targetMode(target,mode.id);
     const total=rows.reduce((sum,row)=>sum+row.weight,0n);
     const wins=rows.filter(row=>row.book.payoutMultiplier).reduce((sum,row)=>sum+row.weight,0n);
-    const payoutUnits=SECOND_CHANCE_PAYOUTS[target];
-    const rtp=Number(wins)/Number(total)*payoutUnits/SECOND_CHANCE_COST;
+    const units=boostedPayoutUnits(target,mode.id);
     assert.equal(total,SAMPLE_COUNT);
-    assert.ok(Math.abs(rtp-96.5)<0.000001,`${mode} RTP ${rtp}`);
-    assert.ok(payoutUnits<4000);
-    assert.equal(modeCost(mode),2);
-    for(const row of rows){
-      const outcome=decodeOutcome(row.book.events,mode);
-      assert.equal(outcome.secondChance,true);
-      assert.ok(outcome.attempts.length<=2);
-      assert.equal(outcome.payoutUnits,row.book.payoutMultiplier);
+    assert.equal(wins,samplesAtLeast(units));
+    assert.ok(Math.abs(Number(wins)/Number(total)*units-96.5)<0.00001);
+    assert.equal(modeCost(name),1);
+    assert.equal(modeRevealUnits(Number(wins-1n),mode.id)>=target,true);
+    assert.equal(modeRevealUnits(Number(wins),mode.id)<target,true);
+    for (const {book} of rows) {
+      const outcome=decodeOutcome(book.events,name);
+      assert.equal(outcome.modeId,mode.id);
+      assert.equal(outcome.payoutUnits,book.payoutMultiplier);
+      assert.equal(book.events.filter(event=>event.type==='stacksReveal').length,1);
+      assert.ok(outcome.resultUnits<=3900);
+      assert.equal(outcome.resultUnits,modeRevealUnits(outcome.visualSeed,mode.id));
     }
   }
+  const book=modeBooks(250,'reactor')[0].book;
+  assert.throws(()=>decodeOutcome(book.events,'prism_target_250'),/game mode/);
+  assert.throws(()=>modeTarget('second_chance_250'));
 });
 
-test('mode schedule satisfies Engine base volatility, hit-rate and 40x tail limits', () => {
+test('classic mode schedule satisfies Engine base volatility, hit-rate and 40x tail limits', () => {
   for (const target of SUPPORTED_TARGETS) {
     const probability = Number(samplesAtLeast(target)) / Number(SAMPLE_COUNT);
     const mean = probability * target / 100;
@@ -106,20 +113,25 @@ test('Engine authenticates, uses selected target mode and only server balances',
   assert.equal(mock.calls.length, 3);
 });
 
-test('Engine charges Second Chance against the 2x mode cost and sends its own mode', async () => {
-  const calls=[],book=secondChanceBooks(250)[1].book;
-  const fetcher=async (url,options)=>{
-    const body=options.body&&JSON.parse(options.body);calls.push({url,body});
-    const payload=url.endsWith('/authenticate')
-      ? {balance:{amount:2000000,currency:'USD'},config:{minBet:100000,maxBet:2000000,stepBet:100000,betLevels:[100000,1000000]}}
-      : {balance:{amount:0,currency:'USD'},round:{amount:1000000,payout:3100000,active:true,mode:'second_chance_250',state:book.events,betID:9}};
-    return {ok:true,json:async()=>payload};
-  };
-  const session=createEngineSession('https://game.test/?sessionID=t&rgs_url=rgs.test',{fetcher});
-  await session.authenticate();
-  const round=await session.play('1',250,{secondChance:true});
-  assert.equal(round.outcome.attempts.length,2);
-  assert.deepEqual(calls[1].body,{sessionID:'t',amount:1000000,mode:'second_chance_250'});
+test('boosted Engine play charges one stake and settles the boosted payout', async () => {
+  for(const mode of GAME_MODES) {
+    const calls=[],book=modeBooks(250,mode.id)[0].book,units=250*mode.boost;
+    const name=targetMode(250,mode.id);
+    const fetcher=async (url,options)=>{
+      const body=options.body&&JSON.parse(options.body);calls.push({url,body});
+      const payload=url.endsWith('/authenticate')
+        ? {balance:{amount:1000000,currency:'USD'},config:{minBet:100000,maxBet:2000000,stepBet:100000,betLevels:[1000000]}}
+        : url.endsWith('/play') ? {balance:{amount:0,currency:'USD'},round:{amount:1000000,payout:units*10000,active:true,mode:name,state:book.events,betID:9}}
+        : {balance:{amount:units*10000,currency:'USD'}};
+      return {ok:true,json:async()=>payload};
+    };
+    const session=createEngineSession('https://game.test/?sessionID=t&rgs_url=rgs.test',{fetcher});
+    await session.authenticate();
+    const round=await session.play('1',250,{modeId:mode.id});
+    assert.equal(round.outcome.modeId,mode.id);
+    assert.deepEqual(calls[1].body,{sessionID:'t',amount:1000000,mode:name});
+    assert.equal(await session.finish(),units*10000);
+  }
 });
 
 test('inactive rounds do not call end-round; active rounds resume without play', async () => {
@@ -141,6 +153,24 @@ test('ambiguous play errors lock controls and never retry a money operation', as
   await assert.rejects(session.play('1', 250), /not ready/);
   assert.equal(session.locked, true);
   assert.equal(mock.calls.length, 2);
+});
+
+test('boosted public replays preserve payout and cannot mutate wallets', async () => {
+  for (const modeId of ['prism', 'tesseract', 'reactor']) {
+    const book = modeBooks(250, modeId).find(row => row.book.payoutMultiplier).book;
+    const calls = [];
+    const session = createEngineSession(`https://game.test/?replay=true&rgs_url=rgs.test&game=stacks&version=4&mode=${targetMode(250, modeId)}&event=${book.id}&amount=1000000`, {
+      fetcher: async url => {
+        calls.push(url);
+        return { ok: true, json: async () => ({ costMultiplier: 1, payoutMultiplier: book.payoutMultiplier / 100, state: book.events }) };
+      },
+    });
+    const round = await session.loadReplay();
+    assert.equal(round.outcome.modeId, modeId);
+    assert.equal(round.payout, book.payoutMultiplier * 10000);
+    await assert.rejects(session.play('1', 250, { modeId }));
+    assert.equal(calls.length, 1);
+  }
 });
 
 test('public replays never authenticate or place plays; builds fail closed without launch parameters', async () => {

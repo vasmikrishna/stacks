@@ -1,4 +1,4 @@
-import { apiAmount, decodeOutcome, modeCost, secondChanceMode, targetMode } from './engine-contract.mjs';
+import { apiAmount, decodeOutcome, modeCost, targetMode } from './engine-contract.mjs';
 
 function integer(value, label, minimum = 0) {
   if (!Number.isSafeInteger(value) || value < minimum) throw new Error(`Invalid ${label} from the server.`);
@@ -85,9 +85,9 @@ export function createEngineSession(href, { required = false, fetcher = globalTh
     return amount;
   };
 
-  session.play = async (text, targetUnits, { secondChance = false } = {}) => {
+  session.play = async (text, targetUnits, { modeId = 'classic' } = {}) => {
     if (publicReplay || session.locked || session.busy || session.round) throw new Error('This session is not ready for a new round.');
-    const mode = secondChance ? secondChanceMode(targetUnits) : targetMode(targetUnits);
+    const mode = targetMode(targetUnits, modeId);
     const amount = session.validateAmount(text, modeCost(mode));
     session.busy = true;
     try {

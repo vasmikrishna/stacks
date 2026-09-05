@@ -2,13 +2,14 @@ import * as THREE from './vendor/three.module.js';
 import { lightCrystalStage, crystalMaterials, crystalDetails, stageEffects } from './crystal-stage.js?v=6';
 import RAPIER from './vendor/rapier.es.js';
 await RAPIER.init();
-import { bonusStage, crashPoint, multiplierUnits, payout, resolveRound } from './math.mjs';
+import { bonusStage, multiplierUnits, payout, resolveRound } from './math.mjs';
 import { predictionStops, predictionPosition, predictionValue, adjustPrediction, snapPrediction } from './prediction-scale.mjs?v=3';
 import { winTier, winTiming, displayedPayout, fountainParticle } from './win-timing.mjs?v=2';
 import { createRecentResults } from './recent-results.js';
 import { createReplaySnapshot, seededUnit } from './replay.mjs';
 import { growthCue, landingCue } from './audio-design.mjs';
-import { apiAmount, amountText, nearestTarget, secondChanceMode, targetMode, SECOND_CHANCE_COST, SECOND_CHANCE_PAYOUTS, SUPPORTED_TARGETS } from './engine-contract.mjs?v=5';
+import { apiAmount, amountText, nearestTarget, targetMode, samplesAtLeast, SAMPLE_COUNT, SUPPORTED_TARGETS } from './engine-contract.mjs';
+import { GAME_MODES, gameMode, boostedPayoutUnits, modeRevealUnits } from './game-modes.mjs';
 import { createEngineSession } from './engine-session.mjs';
 
 const $ = (s) => document.querySelector(s);
@@ -41,7 +42,7 @@ function dismissLoader(){
  const fallback=setTimeout(release,4000);
  Promise.all([logoReady,fontsReady]).then(()=>{clearTimeout(fallback);release();});
 }
-const state = { balance: 1245000, phase: 'idle', multiplier: 1, bonus: 0, bet: 0, auto: false, autoRound: 0, autoTotal: 0, remaining: 0, history: [], nextRoundId: 1, replay: null, replayRestore: null, visualSeed: 0, bonusTransitions: [], sound: true, music: true, musicVolume: .35, motion: true, turbo: false, secondChance: false, attempts: [], attemptIndex: 0 };
+const state = { balance: 1245000, phase: 'idle', multiplier: 1, bonus: 0, bet: 0, auto: false, autoRound: 0, autoTotal: 0, remaining: 0, history: [], nextRoundId: 1, replay: null, replayRestore: null, visualSeed: 0, bonusTransitions: [], sound: true, music: true, musicVolume: .35, motion: true, turbo: false, modeId: 'classic' };
 if(engine.enabled)state.balance=0;
 let engineReplaySnapshot=null;
 const engineNotice=document.createElement('div');
@@ -78,10 +79,10 @@ syncPredictionSlider();
 const predictionPanel = steppers[1].parentElement;
 predictionPanel.classList.add('prediction-panel');
 $('.bottom-playbar').before(predictionPanel);
-const secondChanceToggle=document.createElement('button');
-secondChanceToggle.type='button';secondChanceToggle.className='second-chance-toggle';secondChanceToggle.setAttribute('role','switch');secondChanceToggle.setAttribute('aria-checked','false');
-secondChanceToggle.innerHTML='<span>Second Chance</span><small>2x cost</small>';
-predictionPanel.append(secondChanceToggle);
+const modePanel=document.createElement('section');
+modePanel.className='mode-panel';modePanel.setAttribute('aria-label','Game mode and payout');
+modePanel.innerHTML=`<div class="mode-options" role="group" aria-label="Game mode">${GAME_MODES.map(mode=>`<button type="button" data-mode="${mode.id}" aria-pressed="${mode.id==='classic'}"><i class="mode-symbol" aria-hidden="true"></i><span>${mode.label}</span><b>${mode.boost}x</b></button>`).join('')}</div><div class="mode-quote"><span>Total payout <strong id="modePayout"></strong></span><span>Win chance <strong id="modeOdds"></strong></span></div>`;
+predictionPanel.before(modePanel);
 const action = $('.play-button');
 action.innerHTML='<img src="./assets/arcade/play.svg" alt=""><span class="action-label">Start Stack</span>';
 const auto = $('.toggle-pill');
@@ -108,7 +109,7 @@ function renderDialogHistory(){
  rows.innerHTML=state.history.map((round)=>{
   const result=round.resultUnits/100;
   return `<tr>
-   <td>#${round.roundId}</td>
+   <td>#${round.roundId}<small class="history-mode">${gameMode(round.modeId).label}</small></td>
    <td>${(round.targetUnits/100).toFixed(2)}x</td>
    <td class="result-${result>=10?'legendary':round.won?'win':'loss'}">${result.toFixed(2)}x</td>
    <td>${money(round.betCents)}</td>
@@ -135,20 +136,15 @@ function updateRulesMath(){
  const target=Math.min(39,Math.max(1.5,Number($('#prediction').value)||2.5));
  const targetLabel=target.toFixed(2)+'x';
  for(const selector of ['#rulesTargetLabel','#rulesWinTarget','#rulesLossTarget'])$(selector).textContent=targetLabel;
- $('#rulesWinValue').textContent=engine.enabled?money(Number(BigInt(apiAmount(String(stake)))*BigInt(multiplierUnits(target))/100n)/10000):money(payout(Math.round(stake*100),multiplierUnits(target)));
+ $('#rulesWinValue').textContent=engine.enabled?money(Number(BigInt(apiAmount(String(stake)))*BigInt(boostedPayoutUnits(multiplierUnits(target),state.modeId))/100n)/10000):money(payout(Math.round(stake*100),boostedPayoutUnits(multiplierUnits(target),state.modeId)));
  $('#rulesLossValue').textContent=stake.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
-function secondChancePayoutUnits(){
- return SECOND_CHANCE_PAYOUTS[multiplierUnits(normalizePrediction(Number($('#prediction').value)||2.5))]||SECOND_CHANCE_PAYOUTS[250];
-}
-function updateSecondChanceSummary(){
- const target=normalizePrediction(Number($('#prediction').value)||2.5),stake=Math.max(0,Number($('#bet').value)||0);
- $('#secondChanceTarget').textContent=target.toFixed(2)+'x';
- $('#secondChanceCost').textContent=(stake*SECOND_CHANCE_COST).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6});
- $('#secondChancePayout').textContent=(stake*secondChancePayoutUnits()/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6});
-}
-function confirmSecondChance(){
- updateSecondChanceSummary();$('#secondChanceDialog').showModal();
+function updateModeQuote(){
+ const units=boostedPayoutUnits(multiplierUnits(normalizePrediction(Number($('#prediction').value)||2.5)),state.modeId);
+ let amount='--';
+ try{amount=money(Number(BigInt(apiAmount($('#bet').value))*BigInt(units)/100n)/10000);}catch{}
+ $('#modePayout').textContent=`${amount} (${(units/100).toFixed(2)}x)`;
+ $('#modeOdds').textContent=(Number(samplesAtLeast(units))/Number(SAMPLE_COUNT)*100).toFixed(2)+'%';
 }
 function selectInfoPanel(name,focus=false){
  activeInfoPanel=infoPanels[name]?name:'how-to';
@@ -380,15 +376,16 @@ $('#turbo').onclick=()=>{
  state.turbo=!state.turbo;
  update();
 };
-secondChanceToggle.onclick=()=>{
- if(state.phase==='running'||state.auto||state.replay)return;
- state.secondChance=!state.secondChance;
- if(state.secondChance){$('#prediction').value=(nearestTarget(Number($('#prediction').value)*100)/100).toFixed(2);syncPredictionSlider();}
- update();
-};
-$('#confirmSecondChance').onclick=event=>{event.preventDefault();$('#secondChanceDialog').close();start(true);};
+modePanel.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{
+ if(state.phase==='running'||state.auto||state.replay||engine.enabled&&(engine.locked||engine.busy))return;
+ state.modeId=button.dataset.mode;state.phase='idle';state.multiplier=1;state.predictionReached=false;clearCelebration();message.remove();stopGameplaySounds();resetDebris();rebuild(10);applyModeTheme();update();
+});
+document.addEventListener('input',event=>{if(['bet','target','prediction'].includes(event.target.id))updateModeQuote();});
+document.addEventListener('change',event=>{if(['bet','target','prediction'].includes(event.target.id))updateModeQuote();});
+steppers[0].addEventListener('click',updateModeQuote);
+steppers[1].addEventListener('click',updateModeQuote);
 function update() {
- const tier=state.phase==='won'?winTier(state.target):null;
+ const tier=state.phase==='won'?winTier(state.target*gameMode(state.modeId).boost):null;
  $('.stage').dataset.win=tier?.id||'';
  $('.stage').dataset.phase=state.phase;
  message.classList.toggle('win-message',state.phase==='won');
@@ -399,7 +396,7 @@ function update() {
  $('.prediction-track').dataset.phase=state.phase;
  predictionPanel.dataset.reached=Boolean(state.predictionReached);
  $('#live-multiplier').textContent=state.phase==='running'?'Live '+(multiplierUnits(state.multiplier)/100).toFixed(2)+'x':'';
- action.querySelector('.action-label').textContent=state.replay?(state.phase==='running'?'Stop Replay':'Exit Replay'):state.phase==='running'?(state.secondChance?`Attempt ${state.attemptIndex+1} of 2`:'Revealing result'):state.auto?`Autoplay ${state.autoRound}/${state.autoTotal}`:state.secondChance?'Play Second Chance':'Start Stack';
+ action.querySelector('.action-label').textContent=state.replay?(state.phase==='running'?'Stop Replay':'Exit Replay'):state.phase==='running'?'Revealing result':state.auto?`Autoplay ${state.autoRound}/${state.autoTotal}`:'Start Stack';
  action.querySelector('img').src=state.replay?'./assets/arcade/stop.svg':'./assets/arcade/play.svg';
  action.disabled=!state.replay&&(state.phase==='running'||state.auto);
  const autoplayLabel=state.auto ? `Stop autoplay · round ${state.autoRound} of ${state.autoTotal}` : 'Open autoplay settings';
@@ -414,10 +411,11 @@ function update() {
  const turbo=$('#turbo'),turboLabel=`Turbo mode ${state.turbo?'on':'off'}: 2.5x faster round presentation`;
  turbo.setAttribute('aria-checked',state.turbo);turbo.setAttribute('aria-label',turboLabel);turbo.title=turboLabel;
  turbo.disabled=state.phase==='running'||state.auto||Boolean(state.replay);
- secondChanceToggle.setAttribute('aria-checked',state.secondChance);
- secondChanceToggle.setAttribute('aria-label',`Second Chance ${state.secondChance?'on':'off'}: two attempts at 2x cost`);
- secondChanceToggle.title=`Second Chance: 2x cost, ${(secondChancePayoutUnits()/100).toFixed(2)}x possible payout`;
- secondChanceToggle.disabled=state.phase==='running'||state.auto||Boolean(state.replay);
+ for(const button of modePanel.querySelectorAll('[data-mode]')){
+  button.setAttribute('aria-pressed',button.dataset.mode===state.modeId);
+  button.disabled=state.phase==='running'||state.auto||Boolean(state.replay)||engine.enabled&&(engine.locked||engine.busy||engine.publicReplay);
+ }
+ updateModeQuote();
  for(const input of document.querySelectorAll('.stepper input, .stepper button, .drawer-row input:not(#musicVolume), #reset')) input.disabled=state.phase==='running' || state.auto || Boolean(state.replay);
  if(engine.enabled){
   const blocked=engine.locked||engine.busy||state.engineSettling;
@@ -425,7 +423,6 @@ function update() {
   action.disabled ||= Boolean(blocked);
   auto.disabled ||= Boolean(engine.publicReplay||engine.locked||(!state.auto&&engine.busy)||engine.config?.jurisdiction?.disabledAutoplay);
   turbo.disabled ||= Boolean(blocked||engine.publicReplay||engine.config?.jurisdiction?.disabledTurbo);
-  secondChanceToggle.disabled ||= Boolean(blocked||engine.publicReplay);
   $('#reset').hidden=true;
   if(engine.publicReplay){
    action.disabled=!engineReplaySnapshot||state.phase==='running';
@@ -460,7 +457,7 @@ function nudgePrediction(direction){
 }
 function normalizePrediction(value){
  const smooth=snapPrediction(value);
- return engine.enabled||state.secondChance?nearestTarget(smooth*100)/100:smooth;
+ return engine.enabled?nearestTarget(smooth*100)/100:smooth;
 }
 $('#predictionDown').onclick=()=>nudgePrediction(-1);
 $('#predictionUp').onclick=()=>nudgePrediction(1);
@@ -489,7 +486,6 @@ $('#target').onkeydown=e=>{
 };
 let nextRound;
 function openAutoplaySettings(){
- state.secondChance=false;
  const drawer=$('#settingsDrawer');
  drawer.classList.add('open','autoplay-open');
  drawer.querySelector('h2').textContent='Autoplay settings';
@@ -537,7 +533,7 @@ function celebrateWin(){
  clearCelebration();
  winAmountNode=message.querySelector('.win-amount');
  if(!state.motion||reducedMotion.matches)return;
- const tier=winTiming(state.target),{count,level}=tier;
+ const tier=winTiming(state.target*gameMode(state.modeId).boost),{count,level}=tier;
  celebrationAge=0;celebration.visible=true;
  winAmountNode.textContent=money(0);
  const accents=[0x80f7b6,0x6ce8ff,0xc89aff,0xff9d64,0xffd579];
@@ -561,7 +557,7 @@ function celebrateWin(){
 function animateCelebration(now){
  if(state.phase!=='won')return;
  const moving=state.motion&&!reducedMotion.matches&&!document.hidden;
- const elapsed=Math.max(0,now-state.ended),timing=winTiming(state.target);
+ const elapsed=Math.max(0,now-state.ended),timing=winTiming(state.target*gameMode(state.modeId).boost);
  const amount=money(displayedPayout(state.payout,elapsed,timing.countDuration,moving));
  if(winAmountNode&&winAmountNode.textContent!==amount)winAmountNode.textContent=amount;
  if(!celebration.visible)return;
@@ -585,6 +581,10 @@ const outline=new THREE.Shape();outline.moveTo(-.35,-.35);outline.lineTo(.35,-.3
 const geo=new THREE.ExtrudeGeometry(outline,{depth:.7,bevelEnabled:true,bevelSegments:3,steps:1,bevelSize:.065,bevelThickness:.065});geo.center();
 const edges=new THREE.EdgesGeometry(geo,18);
 const materials=crystalMaterials();
+const modeMaterials=Object.fromEntries(GAME_MODES.map(mode=>[mode.id,mode.id==='classic'?materials:mode.colors.map(color=>new THREE.MeshPhysicalMaterial({
+ color,emissive:color,emissiveIntensity:.08,roughness:mode.id==='reactor'?.28:.08,metalness:mode.id==='reactor'?.85:.12,
+ transmission:mode.id==='prism'?.82:.45,thickness:.3,transparent:true,opacity:mode.id==='reactor'?.22:.48,depthWrite:false,clearcoat:1,
+}))]));
 const edgeMat=new THREE.LineBasicMaterial({color:0x4ccfe8,transparent:true,opacity:.24,toneMapped:false});
 const coreHighlight=new THREE.Color(0xd8fbff),coreViolet=new THREE.Color(0x9d60ff),projectionHighlight=new THREE.Color(0xc7f8ff);
 const blocks=[];
@@ -593,6 +593,23 @@ for(let row=0;row<7;row++)for(let col=0;col<7-row;col++){
  block.add(new THREE.LineSegments(edges,edgeMat));
  block.userData={x:(col-(6-row)/2)*.88,y:row*.86,velocity:new THREE.Vector3((random()-.5)*5,2+random()*4,(random()-.5)*4)};
  block.castShadow=true;block.receiveShadow=true;crystalDetails(block,blocks.length);
+ const feature=new THREE.Group();block.add(feature);block.userData.feature=feature;
+ const frameGeometry=new THREE.EdgesGeometry(new THREE.BoxGeometry(.64,.64,.64));
+ const frameMaterial=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.9,toneMapped:false});
+ for(const scale of [1,.58]){
+  const frame=new THREE.LineSegments(frameGeometry,frameMaterial);frame.scale.setScalar(scale);feature.add(frame);
+ }
+ const connectors=[];
+ for(const x of [-1,1])for(const y of [-1,1])for(const z of [-1,1])connectors.push(new THREE.Vector3(x*.32,y*.32,z*.32),new THREE.Vector3(x*.1856,y*.1856,z*.1856));
+ feature.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(connectors),frameMaterial));
+ const reactorCore=new THREE.Mesh(new THREE.OctahedronGeometry(.25),new THREE.MeshStandardMaterial({color:0xe4ffae,emissive:0xb9ff46,emissiveIntensity:2,metalness:.4,roughness:.2}));
+ block.add(reactorCore);block.userData.reactorCore=reactorCore;
+ const cage=new THREE.Group(),beamGeo=new THREE.BoxGeometry(1,1,1),beamMat=new THREE.MeshStandardMaterial({color:0xa5adb2,metalness:.92,roughness:.27});
+ for(let axis=0;axis<3;axis++)for(const a of [-.33,.33])for(const b of [-.33,.33]){
+  const beam=new THREE.Mesh(beamGeo,beamMat),position=[0,0,0],scale=[.055,.055,.055];
+  position[(axis+1)%3]=a;position[(axis+2)%3]=b;scale[axis]=.72;beam.position.set(...position);beam.scale.set(...scale);cage.add(beam);
+ }
+ block.add(cage);block.userData.cage=cage;
  block.position.set(block.userData.x,block.userData.y,0);stack.add(block);blocks.push(block);
 }
 const platform=new THREE.Mesh(new THREE.CylinderGeometry(3.7,4,.25,64),new THREE.MeshStandardMaterial({color:0x17202a,metalness:.65,roughness:.3}));platform.position.y=-.59;scene.add(platform);
@@ -652,6 +669,23 @@ const ring=new THREE.Mesh(new THREE.TorusGeometry(3.8,.022,8,100),new THREE.Mesh
 const turntable=new THREE.Group();scene.add(turntable);turntable.add(platform,ring,stack);
 platform.receiveShadow=true;
 const effects=stageEffects(scene,turntable);
+function applyModeTheme(){
+ const mode=gameMode(state.modeId);
+ document.body.dataset.mode=mode.id;
+ scene.fog.color.setHex(mode.background);
+ scene.getObjectByName('stageGround').material.color.setHex(mode.background);
+ fill.color.setHex(mode.colors[1]);
+ platform.material.color.setHex(mode.id==='prism'?0x58766e:mode.id==='reactor'?0x353c2a:0x17202a);
+ for(const block of blocks){
+  const {feature,reactorCore,cage}=block.userData;
+  feature.visible=mode.id==='prism'||mode.id==='tesseract';
+  feature.children[2].visible=mode.id==='tesseract';
+  feature.rotation.set(0,0,0);feature.children[1].rotation.set(0,0,0);
+  feature.children[0].material.color.setHex(mode.colors[0]);
+  reactorCore.visible=cage.visible=mode.id==='reactor';
+  block.userData.core.visible=mode.id!=='reactor';
+ }
+}
 let rulesRenderer=null,rulesScene=null,rulesCamera=null,rulesTower=null,rulesBlocks=[];
 function ensureRulesScene(){
  if(rulesRenderer)return;
@@ -741,7 +775,7 @@ function rememberIntro(){
 function introMath(){
  const stake=Math.max(1,Number($('#bet').value)||100);
  const target=Math.min(39,Math.max(1.5,Number($('#prediction').value)||2.5));
- const possible=payout(Math.round(stake*100),multiplierUnits(target));
+ const possible=payout(Math.round(stake*100),boostedPayoutUnits(multiplierUnits(target),state.modeId));
  $('#introPossibleWin').textContent=money(possible);
  $('#introTargetLabel').textContent=target.toFixed(2)+'x';
  $('#introEquation').textContent=`${stake.toFixed(2)} x ${target.toFixed(2)} = ${money(possible)}`;
@@ -804,15 +838,14 @@ function lockPrediction(){
  $('#prediction').value=value.toFixed(2);syncPredictionSlider();
  return value;
 }
-function start(confirmed=false){
+function start(){
  if(state.phase==='running'||state.replay)return;
- if(state.secondChance&&!confirmed){confirmSecondChance();return;}
  if(engine.enabled){startEngineRound();return;}
  $('#settingsDrawer').classList.remove('open','autoplay-open');
  if(gameInfoDialog.open)gameInfoDialog.close();
  clearTimeout(nextRound);
  const bet=Math.round(Number($('#bet').value)*100), target=lockPrediction();
- const roundCost=bet*(state.secondChance?SECOND_CHANCE_COST:1);
+ const roundCost=bet;
  if(!Number.isFinite(bet)||bet<100||roundCost>state.balance){state.auto=false;update();reportInputError('#bet','Enter a valid stake with a total cost within your balance.');return;}
  if(!Number.isFinite(target)||target<1.5||target>39){state.auto=false;update();reportInputError('#prediction','Prediction must be between 1.50x and 39x.');return;}
  if(state.auto&&!state.remaining){
@@ -824,9 +857,7 @@ function start(confirmed=false){
  state.bet=bet;state.target=target;state.balance-=roundCost;state.payout=0;state.multiplier=1;state.roundId=state.nextRoundId++;
  clearCelebration();stopGameplaySounds();
  // Local demo outcome. Production must obtain the outcome and payout from Stake.
- const first=Math.min(39,crashPoint(crypto.getRandomValues(new Uint32Array(1))[0]));
- const second=Math.min(39,crashPoint(crypto.getRandomValues(new Uint32Array(1))[0]));
- state.attempts=state.secondChance&&first<target?[first,second]:[first];state.attemptIndex=0;state.breakAt=state.attempts[0];
+ state.breakAt=modeRevealUnits(crypto.getRandomValues(new Uint32Array(1))[0],state.modeId)/100;
  state.visualSeed=crypto.getRandomValues(new Uint32Array(1))[0];state.bonusTransitions=[];
  state.started=performance.now();state.speed=NORMAL_REVEAL_RATE*presentationScale();state.phase='running';state.bonus=0;
  clearPredictionCue();state.predictionReached=false;
@@ -837,14 +868,14 @@ function start(confirmed=false){
 function startReplay(round){
  if(state.phase==='running'||state.auto||state.replay)return;
  const replay=round.engine?round:createReplaySnapshot(round);
- state.replayRestore={bet:$('#bet').value,prediction:$('#prediction').value,turbo:state.turbo,secondChance:state.secondChance};
+ state.replayRestore={bet:$('#bet').value,prediction:$('#prediction').value,turbo:state.turbo,modeId:state.modeId};
  state.replay=replay;
  $('#settingsDrawer').classList.remove('open','autoplay-open');
  if(gameInfoDialog.open)gameInfoDialog.close();
  clearTimeout(nextRound);clearCelebration();stopGameplaySounds();resetDebris();
  $('#bet').value=replay.engine?amountText(replay.engine.amount):(replay.betCents/100).toFixed(2);
  $('#prediction').value=(replay.targetUnits/100).toFixed(2);syncPredictionSlider();
- state.bet=replay.betCents;state.target=replay.targetUnits/100;state.secondChance=Boolean(replay.secondChance);state.attempts=(replay.attempts||[replay.resultUnits]).map(result=>result/100);state.attemptIndex=0;state.breakAt=state.attempts[0];
+ state.bet=replay.betCents;state.target=replay.targetUnits/100;state.modeId=replay.modeId||'classic';state.breakAt=replay.resultUnits/100;applyModeTheme();
  state.payout=0;state.multiplier=1;state.turbo=replay.turbo;state.visualSeed=replay.visualSeed;state.bonusTransitions=[];
  state.started=performance.now();state.speed=NORMAL_REVEAL_RATE*presentationScale();state.phase='running';state.bonus=0;
  clearPredictionCue();state.predictionReached=false;
@@ -857,7 +888,7 @@ function finishReplay(){
  const restore=state.replayRestore;
  state.replay=null;state.replayRestore=null;state.phase='idle';state.multiplier=1;state.bonus=0;state.payout=0;state.predictionReached=false;state.breakDelay=0;
  message.remove();message.classList.remove('broken','win-message','replay-loss','long-payout');
- if(restore){$('#bet').value=restore.bet;$('#prediction').value=restore.prediction;state.turbo=restore.turbo;state.secondChance=restore.secondChance;syncPredictionSlider();}
+ if(restore){$('#bet').value=restore.bet;$('#prediction').value=restore.prediction;state.turbo=restore.turbo;state.modeId=restore.modeId;applyModeTheme();syncPredictionSlider();}
  rebuild(10);renderDialogHistory();update();action.focus();
 }
 function settle(won, at){
@@ -872,34 +903,27 @@ function settle(won, at){
  stopGameplaySounds();
  clearPredictionCue();state.predictionReached=won;
  const effectiveUnits=multiplierUnits(state.target);
- const payoutUnits=state.secondChance?SECOND_CHANCE_PAYOUTS[effectiveUnits]:effectiveUnits;
+ const payoutUnits=boostedPayoutUnits(effectiveUnits,state.modeId);
  state.phase=won?'won':'broken';state.multiplier=at;state.bonus=bonusStage(at).level;state.payout=state.replay?state.replay.payoutCents:engine.enabled?engine.round.payout/10000:won?payout(state.bet,payoutUnits):0;if(!state.replay&&!engine.enabled)state.balance+=state.payout;state.ended=performance.now();
  if(won){state.winRotationFrom=turntable.rotation.y;state.winRotationTo=Math.round(turntable.rotation.y/Math.PI)*Math.PI;}
  if(!won){state.breakDelay=0;if(!state.motion||reducedMotion.matches)startDebris();}
  message.classList.toggle('broken',!won);
  message.textContent='';
  if(won){
-  const tier=winTier(state.target),title=state.replay?'REPLAY · YOU WON':'YOU WON';
+  const tier=winTier(state.target*gameMode(state.modeId).boost),title=state.replay?'REPLAY · YOU WON':'YOU WON';
   message.classList.toggle('long-payout',money(state.payout).length>12);
   message.innerHTML=`<span class="win-title" aria-hidden="true">${title}</span><strong class="win-amount" aria-hidden="true">${money(state.payout)}</strong>${state.replay?`<span class="replay-detail" aria-hidden="true">Target ${(state.replay.targetUnits/100).toFixed(2)}x · Result ${(state.replay.resultUnits/100).toFixed(2)}x</span>`:''}<span class="win-announcement">${tier.label}. ${title}. Payout ${money(state.payout)}.</span>`;
   $('.stage').append(message);
-  celebrateWin();playWinSound(state.target);
+  celebrateWin();playWinSound(state.target*gameMode(state.modeId).boost);
  }
  if(!won){playEffect(stackBreakTrack);if(state.replay){message.classList.add('replay-loss');message.innerHTML=`<strong>STACK BROKE</strong><span class="replay-detail">Round #${state.replay.roundId} · Result ${(state.replay.resultUnits/100).toFixed(2)}x before target ${(state.replay.targetUnits/100).toFixed(2)}x</span>`;$('.stage').append(message);}}
  if(!state.replay){
-  const snapshot=engine.enabled?engineSnapshot(engine.round):createReplaySnapshot({roundId:state.roundId,betCents:state.bet,targetUnits:effectiveUnits,resultUnits:multiplierUnits(at),payoutCents:state.payout,won,visualSeed:state.visualSeed,turbo:state.turbo,secondChance:state.secondChance,attempts:state.attempts.map(multiplierUnits),bonusTransitions:state.bonusTransitions});
+  const snapshot=engine.enabled?engineSnapshot(engine.round):createReplaySnapshot({roundId:state.roundId,betCents:state.bet,targetUnits:effectiveUnits,resultUnits:multiplierUnits(at),payoutCents:state.payout,won,visualSeed:state.visualSeed,turbo:state.turbo,modeId:state.modeId,bonusTransitions:state.bonusTransitions});
   state.history.unshift(snapshot);state.history=state.history.slice(0,30);renderRoundHistory();
   if(engine.enabled)engine.round=null;
  }
- if(state.auto&&!state.replay){state.remaining--;const delta=state.balance-state.autoStart;if(state.remaining<=0||delta>=state.profit||delta<=-state.loss||state.balance<state.bet){state.auto=false;state.autoRound=0;state.autoTotal=0;}else nextRound=setTimeout(start,(won?winTiming(state.target).duration+400:1800)/presentationScale());}
+ if(state.auto&&!state.replay){state.remaining--;const delta=state.balance-state.autoStart;if(state.remaining<=0||delta>=state.profit||delta<=-state.loss||state.balance<state.bet){state.auto=false;state.autoRound=0;state.autoTotal=0;}else nextRound=setTimeout(start,(won?winTiming(state.target*gameMode(state.modeId).boost).duration+400:1800)/presentationScale());}
  if(state.replay)renderDialogHistory();
- update();
-}
-function beginSecondAttempt(now){
- state.attemptIndex=1;state.breakAt=state.attempts[1];state.multiplier=1;state.bonus=0;state.bonusTransitions=[];state.predictionReached=false;
- state.started=now;resetDebris();rebuild(1);stopGameplaySounds();lastGrowthAt=now;playMusic();
- message.classList.remove('broken','win-message','replay-loss');message.innerHTML='<strong>SECOND CHANCE</strong><span class="replay-detail">One more stack attempt</span>';$('.stage').append(message);
- setTimeout(()=>{if(state.phase==='running'&&state.attemptIndex===1)message.remove();},Math.round(900/presentationScale()));
  update();
 }
 function tick(now){
@@ -915,7 +939,6 @@ function tick(now){
  // Passing the prediction does not end the reveal or credit the balance.
  const result=resolveRound(next,state.breakAt,state.target);
  if(result){
-  if(state.secondChance&&!result.won&&state.attemptIndex===0&&state.attempts.length>1){beginSecondAttempt(now);return;}
   settle(state.replay?state.replay.won:result.won,state.replay?state.replay.resultUnits/100:result.at);return;
  }
  state.multiplier=next;
@@ -940,14 +963,14 @@ function showEngineError(error){
 }
 
 function engineSnapshot(round){
- return Object.freeze({version:2,roundId:state.roundId||1,betCents:round.amount/10000,targetUnits:round.outcome.targetUnits,resultUnits:round.outcome.resultUnits,payoutCents:round.payout/10000,won:round.payout>0,visualSeed:round.outcome.visualSeed,turbo:state.turbo,secondChance:round.outcome.secondChance,attempts:round.outcome.attempts,bonusTransitions:[],engine:round});
+ return Object.freeze({version:2,roundId:state.roundId||1,betCents:round.amount/10000,targetUnits:round.outcome.targetUnits,resultUnits:round.outcome.resultUnits,payoutCents:round.payout/10000,won:round.payout>0,visualSeed:round.outcome.visualSeed,turbo:state.turbo,modeId:round.outcome.modeId,bonusTransitions:[],engine:round});
 }
 
 function revealEngineRound(round){
  clearTimeout(nextRound);clearCelebration();stopGameplaySounds();resetDebris();
  state.replay=null;state.bet=round.amount/10000;state.target=round.outcome.targetUnits/100;state.balance=engine.balance/10000;
- state.secondChance=round.outcome.secondChance;state.attempts=round.outcome.attempts.map(result=>result/100);state.attemptIndex=0;
- state.payout=0;state.multiplier=1;state.roundId=state.nextRoundId++;state.breakAt=state.attempts[0];
+ state.modeId=round.outcome.modeId;applyModeTheme();
+ state.payout=0;state.multiplier=1;state.roundId=state.nextRoundId++;state.breakAt=round.outcome.resultUnits/100;
  state.visualSeed=round.outcome.visualSeed;state.bonusTransitions=[];state.engineSettled=false;state.engineSettling=false;
  $('#bet').value=amountText(round.amount);$('#prediction').value=state.target.toFixed(2);syncPredictionSlider();
  state.started=performance.now();state.speed=NORMAL_REVEAL_RATE*presentationScale();state.phase='running';state.bonus=0;
@@ -959,14 +982,14 @@ async function startEngineRound(){
  if(engine.locked||engine.busy||state.phase==='running'||state.replay||engine.publicReplay)return;
  $('#settingsDrawer').classList.remove('open','autoplay-open');if(gameInfoDialog.open)gameInfoDialog.close();
  const target=multiplierUnits(lockPrediction());
- try{(state.secondChance?secondChanceMode:targetMode)(target);engine.validateAmount($('#bet').value,state.secondChance?SECOND_CHANCE_COST:1);}catch(error){state.auto=false;update();reportInputError(target<101||target>100000?'#prediction':'#bet',error.message);return;}
+ try{targetMode(target,state.modeId);engine.validateAmount($('#bet').value);}catch(error){state.auto=false;update();reportInputError(SUPPORTED_TARGETS.includes(target)?'#bet':'#prediction',error.message);return;}
  if(state.auto&&!state.remaining){
   const rounds=Number($('#rounds').value),profit=Number($('#profit').value),loss=Number($('#loss').value);
   if(!Number.isInteger(rounds)||rounds<1||rounds>100||!Number.isFinite(profit)||profit<=0||!Number.isFinite(loss)||loss<=0){state.auto=false;update();reportInputError('#rounds','Set valid autoplay rounds and limits.');return;}
   state.remaining=rounds;state.autoTotal=rounds;state.autoStart=engine.balance/10000;state.profit=profit*100;state.loss=loss*100;
  }
  if(state.auto)state.autoRound=state.autoTotal-state.remaining+1;
- try{const pending=engine.play($('#bet').value,target,{secondChance:state.secondChance});update();revealEngineRound(await pending);}catch(error){showEngineError(error);}
+ try{const pending=engine.play($('#bet').value,target,{modeId:state.modeId});update();revealEngineRound(await pending);}catch(error){showEngineError(error);}
 }
 
 async function bootstrapEngine(){
@@ -1002,7 +1025,14 @@ function animate(now){
  if(broken&&moving){state.breakDelay=(state.breakDelay||0)+motionDt;if(state.breakDelay>=.22&&!debrisWorld)startDebris();if(debrisWorld)animateDebris(motionDt);}
  const palette=broken?4:state.phase==='won'?-1:state.bonus===4?2:state.bonus===3?4:state.bonus===2?3:state.bonus===1?2:-1;
  blocks.forEach((b,i)=>{
-  b.visible=i<visibleCount;b.material=materials[palette<0?i%2:palette];
+  b.visible=i<visibleCount;b.material=state.modeId==='classic'||broken?materials[palette<0?i%2:palette]:modeMaterials[state.modeId][i%2];
+  const feature=b.userData.feature;
+  if(moving&&state.modeId==='tesseract'){
+   feature.children[1].rotation.y+=motionDt*.38;
+   feature.children[1].rotation.x+=motionDt*.8;
+  }
+  if(moving&&state.modeId==='reactor')b.userData.reactorCore.rotation.y+=motionDt*1.2;
+  feature.scale.setScalar(state.phase==='won'&&moving?1+Math.sin(Math.min(1,(now-state.ended)/650)*Math.PI)*.12:1);
   const core=b.userData.core,innerCore=b.userData.innerCore,crack=b.userData.crack;
   const multiplierEnergy=Math.min(1,Math.log2(Math.max(1,state.multiplier))/8);
   const coreSpeed=state.phase==='running'?.42+multiplierEnergy*.72:state.phase==='won'?.24:.12;
@@ -1070,12 +1100,12 @@ function animate(now){
  cameraDistance=moving?THREE.MathUtils.lerp(cameraDistance,distance,Math.min(1,dt*(state.phase==='won'?3:5))):distance;
  camera.position.copy(viewDirection).multiplyScalar(cameraDistance).add(aim);camera.lookAt(aim);
  const tierAccent=[0x80f7b6,0x6ce8ff,0xc89aff,0xff9d64,0xffd579];
- const stageColor=state.phase==='won'?tierAccent[winTier(state.target).level]:[0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][state.bonus||0];
+ const stageColor=state.phase==='won'?tierAccent[winTier(state.target*gameMode(state.modeId).boost).level]:state.modeId==='classic'?[0x66eaff,0xffc750,0xbc69ff,0xff6045,0xffe59b][state.bonus||0]:gameMode(state.modeId).colors[0];
  ring.material.color.lerp(new THREE.Color(broken?0xff515c:stageColor),Math.min(1,dt*4));
  effects.update(dt,moving,broken?0xff515c:stageColor,state.bonus,cameraHeight,state.phase==='running');
  $('.multiplier').style.color=broken?'#ff515c':state.phase==='won'?'#4cef97':'#e8faff';
  renderRulesScene(dt);
  renderer.render(scene,camera);dismissLoader();requestAnimationFrame(animate);
 }
-renderRoundHistory();rebuild(10);update();requestAnimationFrame(animate);
+applyModeTheme();renderRoundHistory();rebuild(10);update();requestAnimationFrame(animate);
 if(engine.enabled)bootstrapEngine();

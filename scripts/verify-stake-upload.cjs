@@ -10,7 +10,7 @@ const { chromium } = require(playwrightPath);
   const root = path.resolve(process.argv[2] || 'output/stacks-engine-qa/frontend');
   const evidence = path.join(path.dirname(root), 'browser-verification');
   fs.mkdirSync(evidence, { recursive: true });
-  const { modeBooks } = await import(pathToFileURL(path.resolve('stacks-3d-home/engine-contract.mjs')));
+  const { modeBooks, modeDetails, targetMode } = await import(pathToFileURL(path.resolve('stacks-3d-home/engine-contract.mjs')));
   const failures = [], requests = [], calls = [];
   const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ttf': 'font/ttf', '.mp3': 'audio/mpeg' };
   const server = http.createServer((req, res) => {
@@ -25,15 +25,20 @@ const { chromium } = require(playwrightPath);
   const browser = await chromium.launch({ headless: true });
   let activeRound = null, balance = 10000000, failPlay = false;
   const config = { minBet: 100000, maxBet: 100000000, stepBet: 100000, defaultBetLevel: 1000000, betLevels: [100000, 500000, 1000000, 5000000], jurisdiction: {} };
-  function round(target, amount, win = true) {
-    const rows = modeBooks(target);
+  function round(target, amount, win = true, modeId = 'classic') {
+    const rows = modeBooks(target, modeId);
     const book = (win ? [...rows].reverse().find(row => row.book.payoutMultiplier) : rows.find(row => !row.book.payoutMultiplier)).book;
-    return { betID: 123, mode: `target_${target}`, amount, payout: Number(BigInt(amount) * BigInt(book.payoutMultiplier) / 100n), active: win, state: book.events };
+    return { betID: 123, mode: targetMode(target, modeId), amount, payout: Number(BigInt(amount) * BigInt(book.payoutMultiplier) / 100n), active: win, state: book.events };
   }
   async function pageFor(viewport) {
     const page = await browser.newPage({ viewport });
     page.on('pageerror', error => failures.push(error.message));
     await page.addInitScript(() => localStorage.setItem('stacks:intro-seen:v1', '1'));
+    // Software WebGL shader compilation can block the first mocked response.
+    await page.route('**/engine-session.mjs*', async route => {
+      const response = await route.fetch();
+      await route.fulfill({ response, body: (await response.text()).replace('timeout = 15000', 'timeout = 120000') });
+    });
     await page.route('**/main.js*', async route => {
       const response = await route.fetch();
       await route.fulfill({ response, body: await response.text() + '\nrenderer.setPixelRatio(.5); renderer.transmissionResolutionScale=.3; renderer.shadowMap.enabled=false; resize(); window.engineInspect=()=>({phase:state.phase,balance:state.balance,history:state.history.length,replay:Boolean(state.replay),target:state.target});' });
@@ -46,8 +51,8 @@ const { chromium } = require(playwrightPath);
       if (endpoint.endsWith('/authenticate')) response = { balance: { amount: balance, currency: 'USD' }, config, round: activeRound };
       else if (endpoint.endsWith('/play')) {
         if (failPlay) { await route.abort('failed'); return; }
-        const target = Number(body.mode.slice(7));
-        activeRound = round(target, body.amount, target !== 1000);
+        const { targetUnits: target, modeId } = modeDetails(body.mode);
+        activeRound = round(target, body.amount, target !== 1000, modeId);
         balance -= body.amount;
         response = { balance: { amount: balance, currency: 'USD' }, round: activeRound };
       } else if (endpoint.endsWith('/end-round')) {
@@ -62,7 +67,7 @@ const { chromium } = require(playwrightPath);
     return page;
   }
   const waitReady = async page => {
-    try { await page.waitForSelector('#gameLoader[hidden]', { state: 'attached', timeout: 15000 }); }
+    try { await page.waitForSelector('#gameLoader[hidden]', { state: 'attached', timeout: 60000 }); }
     catch (error) { throw new Error(`Frontend did not become ready: ${failures.join('; ') || error.message}`); }
     await page.waitForFunction(() => typeof window.engineInspect === 'function');
   };
@@ -76,7 +81,8 @@ const { chromium } = require(playwrightPath);
     assert.equal(await desktop.locator('#prediction').getAttribute('step'), '0.01');
     assert.equal(await desktop.locator('#prediction').getAttribute('min'), '1.50');
     assert.equal(await desktop.locator('#prediction').getAttribute('max'), '39');
-    assert.equal(await desktop.locator('#bet').getAttribute('min'), '0.1');
+    await desktop.waitForFunction(() => document.querySelector('#bet').min === '0.1' || !document.querySelector('.engine-notice').hidden);
+    assert.equal(await desktop.locator('#bet').getAttribute('min'), '0.1', await desktop.locator('.engine-notice').textContent());
     await desktop.locator('#prediction').fill('2.40');
     await desktop.locator('#prediction').press('Tab');
     assert.equal(await desktop.locator('#prediction').inputValue(), '2.50');
@@ -96,6 +102,19 @@ const { chromium } = require(playwrightPath);
     await desktop.locator('#prediction').fill('10.00'); await start(desktop);
     assert.equal(calls.filter(call => call.endpoint.endsWith('/play')).at(-1).body.mode, 'target_1000');
     assert.equal(calls.filter(call => call.endpoint.endsWith('/end-round')).length, 1, 'Auto-closed losses must not call end-round');
+    for (const modeId of ['prism', 'tesseract', 'reactor']) {
+      await desktop.locator(`[data-mode="${modeId}"]`).click();
+      await desktop.locator('#prediction').fill('2.50');
+      const before = balance;
+      await start(desktop);
+      assert.equal(activeRound.mode, targetMode(250, modeId));
+      assert.equal(balance, before - activeRound.amount + activeRound.payout);
+      await desktop.locator('#prediction').fill('10.00');
+      const ends = calls.filter(call => call.endpoint.endsWith('/end-round')).length;
+      await start(desktop);
+      assert.equal(activeRound.payout, 0);
+      assert.equal(calls.filter(call => call.endpoint.endsWith('/end-round')).length, ends);
+    }
     const count = calls.length;
     failPlay = true;
     await desktop.locator('.play-button').click();
@@ -106,7 +125,7 @@ const { chromium } = require(playwrightPath);
     await desktop.locator('.engine-notice button').click();
     await desktop.waitForFunction(() => !document.querySelector('.play-button').disabled);
     assert.equal(calls.at(-1).endpoint, '/wallet/authenticate');
-    activeRound = round(250, 1000000); balance -= 1000000;
+    activeRound = round(250, 1000000, true, 'reactor'); balance -= 1000000;
     const playsBeforeResume = calls.filter(call => call.endpoint.endsWith('/play')).length;
     await desktop.reload(); await waitReady(desktop);
     await desktop.waitForFunction(() => window.engineInspect().phase === 'won', null, { timeout: 25000 });
@@ -130,7 +149,7 @@ const { chromium } = require(playwrightPath);
     assert.match(await missing.locator('.engine-notice').textContent(), /Launch this build/);
     assert.deepEqual(failures, []);
     assert.deepEqual(requests.filter(value => value !== '/favicon.ico'), []);
-    const report = { passed: true, checks: ['smooth 0.01x local control', '1.50x to 39x compliant prediction range', 'RGS amount limits', 'authoritative win balance', 'auto-closed loss', 'no mutation retries', 'active-round resume', 'public replay isolation', 'missing-launch failure', 'desktop canvas pixels', 'mobile overflow', 'asset loads'], canvas, requestCounts: { authenticate: calls.filter(call => call.endpoint.endsWith('/authenticate')).length, play: calls.filter(call => call.endpoint.endsWith('/play')).length, endRound: calls.filter(call => call.endpoint.endsWith('/end-round')).length }, realRgsTested: false };
+    const report = { passed: true, checks: ['smooth 0.01x local control', '1.50x to 39x compliant prediction range', 'RGS amount limits', 'authoritative win balance', 'all four mode win and loss settlements', 'boosted active-round resume', 'auto-closed loss', 'no mutation retries', 'active-round resume', 'public replay isolation', 'missing-launch failure', 'desktop canvas pixels', 'mobile overflow', 'asset loads'], canvas, requestCounts: { authenticate: calls.filter(call => call.endpoint.endsWith('/authenticate')).length, play: calls.filter(call => call.endpoint.endsWith('/play')).length, endRound: calls.filter(call => call.endpoint.endsWith('/end-round')).length }, realRgsTested: false };
     fs.writeFileSync(path.join(evidence, 'report.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(JSON.stringify(report, null, 2));
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

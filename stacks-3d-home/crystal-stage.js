@@ -24,6 +24,7 @@ export function lightCrystalStage(renderer, scene) {
   studio.traverse(object => { object.geometry?.dispose(); object.material?.dispose(); });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x080b0e, roughness: .52, metalness: .3 }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -.84; ground.receiveShadow = true; scene.add(ground);
+  ground.name = 'stageGround';
   scene.fog = new THREE.FogExp2(0x080c12, .035);
   const wash = new THREE.SpotLight(0x78c9df, 70, 20, Math.PI / 3, 1, 1.5);
   wash.position.set(0, 6, 1); wash.target.position.set(0, -.8, 0); scene.add(wash, wash.target);

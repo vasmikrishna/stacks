@@ -1,3 +1,4 @@
+import { gameMode } from './game-modes.mjs';
 function integer(value, name, minimum, maximum = Number.MAX_SAFE_INTEGER) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
     throw new RangeError(`Invalid ${name}`);
@@ -28,8 +29,7 @@ export function createReplaySnapshot(round) {
     won: Boolean(round.won),
     visualSeed: integer(round.visualSeed, 'visual seed', 0, 0xffffffff),
     turbo: Boolean(round.turbo),
-    secondChance: Boolean(round.secondChance),
-    attempts: Object.freeze((round.attempts || [round.resultUnits]).map((result) => integer(result, 'attempt result', 96, 100000))),
+    modeId: gameMode(round.modeId).id,
     bonusTransitions: Object.freeze((round.bonusTransitions || []).map((transition) => Object.freeze({
       level: integer(transition.level, 'bonus level', 1, 4),
       atUnits: integer(transition.atUnits, 'bonus multiplier', 100, 100000),
